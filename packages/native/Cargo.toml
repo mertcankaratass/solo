@@ -79,6 +79,9 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # blocking API runs the service on its own thread, so the UI thread never
 # awaits D-Bus.
 ksni = { version = "0.3", features = ["blocking"] }
+# Linux credential storage through the Secret Service API (Issue #128).
+# oo7 is already in the graph through gpui_linux; pinned to the same version.
+oo7 = { version = "0.6.0", default-features = false, features = ["async-std", "native_crypto"] }
 
 # `<webview>`: a WebKitGTK child of the GPUI X11 window (see
 # `native_view/webview_linux.rs`). GTK3 + WebKit 6.0 API (webkit2gtk-4.1);

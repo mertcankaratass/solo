@@ -6,6 +6,7 @@ export {
   addRecentDocument,
   beep,
   createDirectory,
+  deleteCredentials,
   dismissNotification,
   enableWorkerMainThread,
   getKeyboardLayout,
@@ -17,6 +18,7 @@ export {
   openExternalUrl,
   openPath,
   readClipboardText,
+  readCredentials,
   registerUrlScheme,
   requestProcessExit,
   restartApplication,
@@ -27,4 +29,5 @@ export {
   showAllApplications,
   showNotification,
   writeClipboardText,
+  writeCredentials,
 } from "@solo/native"
