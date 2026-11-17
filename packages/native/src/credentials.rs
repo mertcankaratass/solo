@@ -92,17 +92,6 @@ mod linux {
                 .await
                 .map_err(|err| map_oo7_error(err, url))?;
 
-            // Replace any existing item matching (solo-app, url) regardless of old username
-            let search_attributes = [
-                ("solo-app", app_id),
-                ("url", url),
-            ];
-            if let Ok(existing) = keyring.search_items(&search_attributes).await {
-                for item in existing {
-                    let _ = item.delete().await;
-                }
-            }
-
             let label = format!("{app_id} ({url})");
             let attributes = [
                 ("solo-app", app_id),
@@ -110,10 +99,26 @@ mod linux {
                 ("username", username),
             ];
 
+            // Create or replace the item with the exact attributes first
             keyring
-                .create_item(&label, &attributes, secret, false)
+                .create_item(&label, &attributes, secret, true)
                 .await
                 .map_err(|err| map_oo7_error(err, url))?;
+
+            // Clean up any old items for this (app_id, url) whose username differs
+            let search_attributes = [
+                ("solo-app", app_id),
+                ("url", url),
+            ];
+            if let Ok(existing) = keyring.search_items(&search_attributes).await {
+                for item in existing {
+                    if let Ok(attrs) = item.attributes().await {
+                        if attrs.get("username").map(|s| s.as_str()) != Some(username) {
+                            let _ = item.delete().await;
+                        }
+                    }
+                }
+            }
 
             Ok(())
         })

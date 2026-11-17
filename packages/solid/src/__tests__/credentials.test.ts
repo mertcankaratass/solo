@@ -123,6 +123,7 @@ describe("credentials.write", () => {
         "https://api.example.com",
         "user",
         "super-secret-pw",
+        "dev.solo.test",
       ),
     ).rejects.toThrow("No Secret Service provider available on the session bus")
   })
