@@ -305,8 +305,9 @@ thread_local! {
     #[cfg(target_os = "macos")]
     static MAC_APPLICATION: RefCell<Option<MacApplicationState>> = const { RefCell::new(None) };
     /// The status item a `menuBar` application installed. Linux hosts it in a
-    /// status-notifier plugin rather than the window manager's menu bar.
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    /// status-notifier plugin rather than the window manager's menu bar;
+    /// Windows hosts it in the Taskbar Notification Area (System Tray).
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
     static MENU_BAR: RefCell<Option<crate::menu_bar::MenuBar>> = const { RefCell::new(None) };
 }
 
