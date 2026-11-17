@@ -103,6 +103,15 @@ gpui_wgpu = { git = "https://github.com/zed-industries/zed", rev = "1d8a29e1e2f6
 
 [target.'cfg(target_os = "windows")'.dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
+raw-window-handle = "0.6"
+webview2-com = "0.39"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_UI_HiDpi",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [features]
 # Syntax highlighting is opt-in: its grammars are about 8 MB of the library,

@@ -38,6 +38,10 @@ on macOS. Solo's host installs a controller the app can also drive directly
 ## Platform support
 
 - macOS: WKWebView as an AppKit subview.
+- Windows: Microsoft Edge WebView2 (Chromium-based) child view attached directly
+  to GPUI's Win32 HWND. Uses the system-installed Evergreen WebView2 Runtime
+  (pre-installed on modern Windows 10 and 11). If the runtime is absent, reports
+  a diagnostic `loadError` instead of crashing.
 - Linux (X11): a WebKitGTK child window. GTK runs on its own thread, so a
   build that includes `<webview>` links the system libraries `gtk-3`,
   `libwebkit2gtk-4.1` and the JavaScriptCore runtime; the `webview-linux`

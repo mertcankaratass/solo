@@ -20,11 +20,11 @@ pub mod diff;
 pub mod img;
 pub mod input;
 pub mod markdown;
-/// `<webview>` is backed by a real WKWebView on macOS and a WebKitGTK child
-/// window on Linux (X11). Off those platforms the type is not registered, so
-/// `build_element` falls through to its "unknown element type" branch rather
-/// than pretending to render web content.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+/// `<webview>` is backed by a real WKWebView on macOS, a WebKitGTK child
+/// window on Linux (X11), and WebView2 on Windows. Off those platforms the type
+/// is not registered, so `build_element` falls through to its "unknown element
+/// type" branch rather than pretending to render web content.
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 pub mod webview;
 
 // ── Render context ───────────────────────────────────────────────────
@@ -170,7 +170,7 @@ impl CustomElementRegistry {
         registry.register(Box::new(code::CodeFactory));
         registry.register(Box::new(diff::DiffFactory));
         registry.register(Box::new(markdown::MarkdownFactory));
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
         registry.register(Box::new(webview::WebviewFactory));
         registry
     }
