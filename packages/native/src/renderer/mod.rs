@@ -4336,6 +4336,7 @@ impl Default for WindowOptions {
     fn default() -> Self {
         Self {
             app_id: None,
+            app_name: None,
             title: Some("Solo".to_string()),
             width: Some(800.0),
             height: Some(600.0),
