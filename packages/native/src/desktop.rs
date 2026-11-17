@@ -439,14 +439,13 @@ mod windows {
     /// Move one item to the Windows Recycle Bin using Win32 SHFileOperationW.
     pub(super) fn trash(path: &str) -> std::result::Result<(), String> {
         let p = Path::new(path);
-        if !p.exists() {
+        if p.symlink_metadata().is_err() {
             return Err(format!("{path}: The system cannot find the path specified."));
         }
 
-        let full_path = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let full_path = std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
         let path_str = full_path.to_str().unwrap_or(path);
-        let clean_path = path_str.strip_prefix(r"\\?\").unwrap_or(path_str);
-        let normalized_path = clean_path.replace('/', "\\");
+        let normalized_path = path_str.replace('/', "\\");
 
         // SHFileOperationW pFrom must be double-null terminated: path\0\0
         let mut wide: Vec<u16> = std::ffi::OsStr::new(&normalized_path).encode_wide().collect();

@@ -126,8 +126,10 @@ error. Files on system-internal mounts (for example `/tmp` on some systems)
 cannot be trashed by GLib and report the same kind of per-path error.
 
 On Windows, each path is moved to the Recycle Bin via the Windows Shell
-file system interface on a background worker thread, allowing the user to
-restore the item from the Recycle Bin.
+`SHFileOperationW` interface on a background worker thread, allowing the user to
+restore the item from the Recycle Bin. Note that on drives without a Recycle Bin,
+on network shares (UNC paths), or for files exceeding the Recycle Bin's quota,
+Windows may permanently delete the item without confirmation if it cannot be recycled.
 
 ## Verification
 
