@@ -1870,7 +1870,7 @@ fn main_window_closed_on_ui(_cx: &mut gpui::App) {
 /// Install the status item the `menuBar` option asks for. Called once the
 /// window exists, so a session without a status-notifier host fails `init`
 /// rather than leaving an app that can only be killed.
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
 fn create_ui_menu_bar(
     options: &WindowOptions,
     title: &str,
@@ -1886,7 +1886,7 @@ fn create_ui_menu_bar(
 
 /// The status item's Open item: activate the main window, or reopen it when the
 /// application kept running without one.
-#[cfg(all(ui_thread, any(target_os = "linux", target_os = "freebsd")))]
+#[cfg(ui_thread)]
 pub(crate) fn show_main_window_from_menu() -> Result<()> {
     post_ui_command(UiCommand::App(Box::new(|cx| {
         let open = UI_WINDOWS.with(|windows| windows.borrow().main);
@@ -1908,7 +1908,7 @@ pub(crate) fn show_main_window_from_menu() -> Result<()> {
 
 /// The status item's Quit item: end the loop, which exits the process as the
 /// window's close button does once the last window is gone.
-#[cfg(all(ui_thread, any(target_os = "linux", target_os = "freebsd")))]
+#[cfg(ui_thread)]
 pub(crate) fn quit_from_menu() -> Result<()> {
     post_ui_command(UiCommand::App(Box::new(|cx| cx.quit())))
 }
@@ -2475,7 +2475,7 @@ impl SoloRenderer {
                         // only when asked, and `showWindow` (or the status
                         // item's Open) brings the window back.
                         cx.set_quit_mode(quit_mode_for_options(&window_options));
-                        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+                        #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
                         if let Err(error) =
                             create_ui_menu_bar(&window_options, &title, callback)
                         {
@@ -3326,7 +3326,7 @@ impl SoloRenderer {
             return set_macos_menu_bar(json);
         }
 
-        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+        #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
         {
             let callback = self.event_callback_for_view();
             let updated: std::result::Result<(), String> = self.query_app(
@@ -3348,11 +3348,11 @@ impl SoloRenderer {
             return updated.map_err(Error::from_reason);
         }
 
-        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd", target_os = "windows")))]
         {
             let _ = json;
             Err(Error::from_reason(
-                "Menu-bar configuration is supported only on macOS and Linux",
+                "Menu-bar configuration is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -4372,10 +4372,10 @@ pub(crate) fn validate_window_options(options: &WindowOptions) -> Result<()> {
             )));
         }
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd", target_os = "windows")))]
     if options.menu_bar.is_some() {
         return Err(Error::from_reason(
-            "The menuBar option is supported only on macOS and Linux",
+            "The menuBar option is supported only on macOS, Linux and Windows",
         ));
     }
     if let Some(menu_bar) = options.menu_bar.as_ref() {

@@ -23,9 +23,9 @@ terminates the native event loop and JavaScript process.
 
 The platform decides where the item lives:
 
-| macOS | Linux |
-|---|---|
-| an `NSStatusItem` in the system menu bar | a StatusNotifierItem on the session bus |
+| macOS | Linux | Windows |
+|---|---|---|
+| an `NSStatusItem` in the system menu bar | a StatusNotifierItem on the session bus | the Taskbar Notification Area (System Tray) via `Shell_NotifyIcon` |
 
 On Linux nothing shows unless a status-notifier host is running: KDE Plasma
 supports the item natively, XFCE through its status notifier panel plugin, and
@@ -34,12 +34,15 @@ Arch package them). Without a host, `render()` throws, because a background
 app whose only entry point is a missing icon could not be reached again — Solo
 does not run hidden.
 
-An icon is required on both platforms. macOS treats it as an AppKit template
-image, so a monochrome asset adapts to light and dark menu bars; the
-StatusNotifierItem specification has no template images, so on Linux the PNG
-is shown as drawn. There is no dark-panel variant yet: use an icon that reads
-on both, or set a different `iconPath` from `configureMenuBar` when your app
-knows the panel's appearance.
+On Windows, the icon is placed in the Taskbar Notification Area. Clicking or
+right-clicking displays the context menu, and clicking emits `applicationReopen`
+so applications can restore their window.
+
+An icon is required on every platform. macOS treats it as an AppKit template
+image, so a monochrome asset adapts to light and dark menu bars; on Linux and
+Windows the PNG (or ICO on Windows) is shown as drawn. There is no dark-panel
+variant yet: use an icon that reads on both, or set a different `iconPath`
+from `configureMenuBar` when your app knows the panel's appearance.
 
 Use `configureMenuBar` inside the mounted Solid owner to prepend reactive,
 application-defined controls and update the icon or tooltip at runtime:
@@ -115,7 +118,7 @@ restore focus or scroll position should keep those values in Solid state.
 
 Open in the item's menu is enough for an app whose window needs no arguments.
 Apps that want the platform's usual gestures — clicking the Dock icon on
-macOS, clicking the status-item icon on Linux — can listen for the reopen
+macOS, clicking the status-item icon on Linux and Windows — can listen for the reopen
 event instead:
 
 ```ts

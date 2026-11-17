@@ -28,6 +28,11 @@ mod linux;
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub(crate) use linux::MenuBar;
 
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(target_os = "windows")]
+pub(crate) use windows::MenuBar;
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub(crate) enum MenuBarItem {
