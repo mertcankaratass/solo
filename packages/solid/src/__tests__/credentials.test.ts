@@ -46,14 +46,40 @@ describe("credentials.write", () => {
       "https://api.example.com",
       "bot",
       secretBytes,
+      "dev.solo.test",
     )
 
     expect(platform.writeCredentials).toHaveBeenCalledWith(
       "https://api.example.com",
       "bot",
       "binary-secret-token",
-      undefined,
+      "dev.solo.test",
     )
+  })
+
+  it("rejects Uint8Array containing invalid UTF-8 data", async () => {
+    const invalidBytes = new Uint8Array([0xff, 0xff])
+
+    await expect(
+      credentialsModule.credentials.write(
+        "https://api.example.com",
+        "bot",
+        invalidBytes,
+        "dev.solo.test",
+      ),
+    ).rejects.toThrow(TypeError)
+
+    expect(platform.writeCredentials).not.toHaveBeenCalled()
+  })
+
+  it("throws when neither solo.identifier nor appId is present", async () => {
+    await expect(
+      credentialsModule.credentials.write(
+        "https://api.example.com",
+        "bot",
+        "secret",
+      ),
+    ).rejects.toThrow("Credential operations need the app identifier")
   })
 
   it("rejects invalid arguments before dispatch", async () => {
@@ -127,18 +153,18 @@ describe("credentials.read", () => {
   it("returns null when no credential matches", async () => {
     platform.readCredentials.mockResolvedValueOnce(null)
 
-    const entry = await credentialsModule.credentials.read("https://missing.com")
+    const entry = await credentialsModule.credentials.read("https://missing.com", "dev.solo.test")
 
     expect(entry).toBeNull()
     expect(platform.readCredentials).toHaveBeenCalledWith(
       "https://missing.com",
-      undefined,
+      "dev.solo.test",
     )
   })
 
   it("rejects invalid URL", async () => {
-    await expect(credentialsModule.credentials.read("")).rejects.toThrow(TypeError)
-    await expect(credentialsModule.credentials.read(null as never)).rejects.toThrow(TypeError)
+    await expect(credentialsModule.credentials.read("", "dev.solo.test")).rejects.toThrow(TypeError)
+    await expect(credentialsModule.credentials.read(null as never, "dev.solo.test")).rejects.toThrow(TypeError)
     expect(platform.readCredentials).not.toHaveBeenCalled()
   })
 })
@@ -162,17 +188,17 @@ describe("credentials.delete", () => {
   it("returns false when no entry was found", async () => {
     platform.deleteCredentials.mockResolvedValueOnce(false)
 
-    const result = await credentialsModule.credentials.delete("https://missing.com")
+    const result = await credentialsModule.credentials.delete("https://missing.com", "dev.solo.test")
 
     expect(result).toBe(false)
     expect(platform.deleteCredentials).toHaveBeenCalledWith(
       "https://missing.com",
-      undefined,
+      "dev.solo.test",
     )
   })
 
   it("rejects invalid URL", async () => {
-    await expect(credentialsModule.credentials.delete("")).rejects.toThrow(TypeError)
+    await expect(credentialsModule.credentials.delete("", "dev.solo.test")).rejects.toThrow(TypeError)
     expect(platform.deleteCredentials).not.toHaveBeenCalled()
   })
 })

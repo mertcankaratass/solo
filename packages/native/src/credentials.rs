@@ -45,10 +45,10 @@ fn validate_username(username: &str) -> Result<()> {
     Ok(())
 }
 
-fn resolve_app_id(app_id: Option<String>) -> String {
+fn resolve_app_id(app_id: Option<String>) -> Result<String> {
     app_id
         .filter(|id| !id.trim().is_empty())
-        .unwrap_or_else(|| "dev.solo.app".to_string())
+        .ok_or_else(|| Error::from_reason("Credential operations require an app identifier"))
 }
 
 // ---------------------------------------------------------------------------
@@ -60,21 +60,42 @@ mod linux {
     use super::*;
 
     fn map_oo7_error(err: oo7::Error, url: &str) -> Error {
-        let msg = err.to_string();
-        if msg.contains("ServiceUnknown")
-            || msg.contains("org.freedesktop.secrets")
-            || msg.contains("No such interface")
-            || msg.contains("no secret service")
-        {
-            Error::from_reason("No Secret Service provider available on the session bus")
-        } else if msg.contains("dismissed")
-            || msg.contains("cancelled")
-            || msg.contains("canceled")
-            || msg.contains("Prompt")
-        {
-            Error::from_reason("Keyring unlock prompt was dismissed")
-        } else {
-            Error::from_reason(format!("Keyring operation failed for {url}: {msg}"))
+        match &err {
+            oo7::Error::Dismissed | oo7::Error::Cancelled => {
+                Error::from_reason("Keyring unlock prompt was dismissed")
+            }
+            oo7::Error::NoService => {
+                Error::from_reason("No Secret Service provider available on the session bus")
+            }
+            oo7::Error::ZBus(zbus_err) => {
+                let msg = zbus_err.to_string();
+                if msg.contains("ServiceUnknown")
+                    || msg.contains("org.freedesktop.secrets")
+                    || msg.contains("No such interface")
+                {
+                    Error::from_reason("No Secret Service provider available on the session bus")
+                } else {
+                    Error::from_reason(format!("Keyring operation failed for {url}: {err}"))
+                }
+            }
+            _ => {
+                let msg = err.to_string();
+                if msg.contains("ServiceUnknown")
+                    || msg.contains("org.freedesktop.secrets")
+                    || msg.contains("No such interface")
+                    || msg.contains("no secret service")
+                {
+                    Error::from_reason("No Secret Service provider available on the session bus")
+                } else if msg.contains("dismissed")
+                    || msg.contains("cancelled")
+                    || msg.contains("canceled")
+                    || msg.contains("Prompt")
+                {
+                    Error::from_reason("Keyring unlock prompt was dismissed")
+                } else {
+                    Error::from_reason(format!("Keyring operation failed for {url}: {msg}"))
+                }
+            }
         }
     }
 
@@ -89,6 +110,17 @@ mod linux {
                 .await
                 .map_err(|err| map_oo7_error(err, url))?;
 
+            // Replace any existing item matching (solo-app, url) regardless of old username
+            let search_attributes = [
+                ("solo-app", app_id),
+                ("url", url),
+            ];
+            if let Ok(existing) = keyring.search_items(&search_attributes).await {
+                for item in existing {
+                    let _ = item.delete().await;
+                }
+            }
+
             let label = format!("{app_id} ({url})");
             let attributes = [
                 ("solo-app", app_id),
@@ -97,7 +129,7 @@ mod linux {
             ];
 
             keyring
-                .create_item(&label, &attributes, secret, true)
+                .create_item(&label, &attributes, secret, false)
                 .await
                 .map_err(|err| map_oo7_error(err, url))?;
 
@@ -198,9 +230,8 @@ mod linux {
                     continue;
                 }
 
-                if item.delete().await.is_ok() {
-                    deleted_any = true;
-                }
+                item.delete().await.map_err(|err| map_oo7_error(err, url))?;
+                deleted_any = true;
             }
 
             Ok(deleted_any)
@@ -231,9 +262,7 @@ impl Task for WriteCredentialsTask {
         }
         #[cfg(target_os = "macos")]
         {
-            let platform = gpui_platform::current_platform(false);
-            let task = platform.write_credentials(&self.url, &self.username, self.secret.as_bytes());
-            futures::executor::block_on(task)
+            gpui_apple::keychain::write_credentials(&self.url, &self.username, self.secret.as_bytes())
                 .map_err(|err| Error::from_reason(format!("Keychain write failed for {}: {err}", self.url)))
         }
         #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "macos")))]
@@ -266,9 +295,7 @@ impl Task for ReadCredentialsTask {
         }
         #[cfg(target_os = "macos")]
         {
-            let platform = gpui_platform::current_platform(false);
-            let task = platform.read_credentials(&self.url);
-            let result = futures::executor::block_on(task)
+            let result = gpui_apple::keychain::read_credentials(&self.url)
                 .map_err(|err| Error::from_reason(format!("Keychain read failed for {}: {err}", self.url)))?;
             Ok(result.and_then(|(username, bytes)| {
                 String::from_utf8(bytes).ok().map(|secret| CredentialResult {
@@ -307,11 +334,11 @@ impl Task for DeleteCredentialsTask {
         }
         #[cfg(target_os = "macos")]
         {
-            let platform = gpui_platform::current_platform(false);
-            let task = platform.delete_credentials(&self.url);
-            futures::executor::block_on(task)
-                .map(|_| true)
-                .map_err(|err| Error::from_reason(format!("Keychain delete failed for {}: {err}", self.url)))
+            match gpui_apple::keychain::delete_credentials(&self.url) {
+                Ok(()) => Ok(true),
+                Err(gpui_apple::keychain::KeychainError::Security { status, .. }) if status == -25300 => Ok(false),
+                Err(err) => Err(Error::from_reason(format!("Keychain delete failed for {}: {err}", self.url))),
+            }
         }
         #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "macos")))]
         {
@@ -341,7 +368,7 @@ pub fn write_credentials(
 ) -> Result<AsyncTask<WriteCredentialsTask>> {
     validate_url(&url)?;
     validate_username(&username)?;
-    let app_id = resolve_app_id(app_id);
+    let app_id = resolve_app_id(app_id)?;
     Ok(AsyncTask::new(WriteCredentialsTask {
         url,
         username,
@@ -358,7 +385,7 @@ pub fn read_credentials(
     app_id: Option<String>,
 ) -> Result<AsyncTask<ReadCredentialsTask>> {
     validate_url(&url)?;
-    let app_id = resolve_app_id(app_id);
+    let app_id = resolve_app_id(app_id)?;
     Ok(AsyncTask::new(ReadCredentialsTask { url, app_id }))
 }
 
@@ -370,6 +397,6 @@ pub fn delete_credentials(
     app_id: Option<String>,
 ) -> Result<AsyncTask<DeleteCredentialsTask>> {
     validate_url(&url)?;
-    let app_id = resolve_app_id(app_id);
+    let app_id = resolve_app_id(app_id)?;
     Ok(AsyncTask::new(DeleteCredentialsTask { url, app_id }))
 }

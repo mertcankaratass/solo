@@ -9,11 +9,17 @@ export interface CredentialEntry {
   secret: string
 }
 
-function resolveAppId(appId?: string): string | undefined {
+function resolveAppId(appId?: string): string {
   if (typeof appId === "string" && appId.trim().length > 0) {
     return appId.trim()
   }
-  return appInfo().identifier ?? undefined
+  const identifier = appInfo().identifier
+  if (!identifier) {
+    throw new Error(
+      'Credential operations need the app identifier. Set "solo": { "identifier": "com.example.app" } in package.json or pass an explicit appId',
+    )
+  }
+  return identifier
 }
 
 function validateUrl(url: unknown): asserts url is string {
@@ -39,7 +45,11 @@ function normalizeSecret(secret: unknown): string {
     if (secret.byteLength === 0) {
       throw new TypeError("Credential secret must not be empty")
     }
-    return new TextDecoder().decode(secret)
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(secret)
+    } catch {
+      throw new TypeError("Credential secret contains invalid UTF-8 data")
+    }
   }
   throw new TypeError("Credential secret must be a string or Uint8Array")
 }

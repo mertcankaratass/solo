@@ -36,9 +36,9 @@ Top-level functions `writeCredential`, `readCredential`, and `deleteCredential` 
 - **`url`** (`string`): The non-empty URL or service identifier (e.g. `"https://api.github.com"`).
 - **`username`** (`string`): The user account identifier (e.g. `"octacat"`).
 - **`secret`** (`string | Uint8Array`): The password or token to store. If passed as a `Uint8Array`, it is decoded as UTF-8.
-- **`appId`** (`string`, optional): The reverse-DNS identifier used to isolate stored credentials. When omitted, it defaults to `solo.identifier` in `package.json` (or `"dev.solo.app"`).
+- **`appId`** (`string`, optional): The reverse-DNS identifier used to isolate stored credentials. When omitted, it defaults to `solo.identifier` in `package.json`. If neither is provided, credential operations reject with an error.
 
-## Linux Secret Service Isolation
+## Platform Differences & Partitioning
 
 On Linux, credentials are saved with attributes:
 - `solo-app`: `<app_id>`
@@ -48,6 +48,8 @@ On Linux, credentials are saved with attributes:
 And an item label of `"<app_id> (<url>)"`. This guarantees that:
 - Two Solo apps storing credentials for the same service URL do not read or overwrite each other.
 - Solo apps do not collide with Zed editor credentials (which use the hardcoded `zed-github-account` label).
+
+On macOS, the keychain item is keyed by service URL. Per-app partitioning via `solo.identifier` is enforced on Linux.
 
 ## Error Handling & Security
 
