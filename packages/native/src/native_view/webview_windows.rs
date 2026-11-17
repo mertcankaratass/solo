@@ -18,7 +18,7 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2NavigationCompletedEventArgs, ICoreWebView2NavigationStartingEventArgs,
     ICoreWebView2NewWindowRequestedEventArgs, ICoreWebView2Settings2,
     ICoreWebView2SourceChangedEventArgs, ICoreWebView2WebMessageReceivedEventArgs,
-    COREWEBVIEW2_WEB_ERROR_STATUS,
+    COREWEBVIEW2_WEB_ERROR_STATUS, COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED,
 };
 use webview2_com::{
     CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
@@ -505,9 +505,9 @@ impl WebViewState {
         } else {
             let mut status = COREWEBVIEW2_WEB_ERROR_STATUS::default();
             let _ = unsafe { args.WebErrorStatus(&mut status) };
-            // Intercepted navigations cancelled with SetCancel(true) report status 23 (OPERATION_CANCELED).
+            // Intercepted navigations cancelled with SetCancel(true) report status OPERATION_CANCELED (value 14).
             // Do not emit loadError or mark failed for cancelled navigations.
-            if status.0 == 23 {
+            if status == COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED || status.0 == 14 {
                 return;
             }
             let reason = format!("Navigation failed with status {}", status.0);
@@ -709,7 +709,6 @@ impl NativeViewInstance for WindowsWebView {
             .map(std::path::PathBuf::from)
             .unwrap_or_else(std::env::temp_dir)
             .join(app_id)
-            .join("cache")
             .join("webview2");
         let user_data_hstring = windows::core::HSTRING::from(user_data.to_string_lossy().as_ref());
 
@@ -882,6 +881,55 @@ impl NativeViewInstance for WindowsWebView {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn set_webview_source(
+        &mut self,
+        url: Option<&str>,
+        html: Option<&str>,
+        base_url: Option<&str>,
+    ) {
+        let mut guard = self.state.borrow_mut();
+        if guard.destroyed {
+            return;
+        }
+        if url.is_some() && html.is_some() {
+            emit(
+                &guard.callback,
+                guard.element_id,
+                EVENT_LOAD_ERROR,
+                Some("WebView url and html are mutually exclusive".to_string()),
+            );
+            return;
+        }
+        if base_url.is_some() && html.is_none() {
+            emit(
+                &guard.callback,
+                guard.element_id,
+                EVENT_LOAD_ERROR,
+                Some("WebView baseUrl requires html".to_string()),
+            );
+            return;
+        }
+        if guard.last_url.as_deref() == url
+            && guard.last_html.as_deref() == html
+            && guard.last_base_url.as_deref() == base_url
+        {
+            return;
+        }
+
+        guard.begin_document();
+        guard.last_url = url.map(str::to_string);
+        guard.last_html = html.map(str::to_string);
+        guard.last_base_url = base_url.map(str::to_string);
+
+        if let Some(html) = html {
+            guard.load_html_inner(html, base_url);
+        } else if let Some(url) = url {
+            guard.load_url_inner(url);
+        } else {
+            guard.load_html_inner("", None);
         }
     }
 
