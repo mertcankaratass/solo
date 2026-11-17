@@ -1,6 +1,7 @@
 //! System notifications in the macOS Notification Center, through GPUI's
 //! `UNUserNotificationCenter` support (`App::show_system_notification`), and on
-//! Linux via the D-Bus Desktop Notifications specification (`notify-rust`).
+//! Linux via the D-Bus Desktop Notifications specification (`notify-rust`),
+//! and on Windows via WinRT Toast Notifications.
 //!
 //! GPUI asks for authorization the first time a notification is posted and
 //! delivers nothing once the user has denied it. It also disables
@@ -18,10 +19,7 @@
 //! so a response that launched the app waits here until a renderer is
 //! initialized, as opened URLs do (`open_urls.rs`).
 
-#![cfg_attr(
-    not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")),
-    allow(dead_code)
-)]
+#![cfg_attr(not(any(target_os = "macos", ui_thread)), allow(dead_code))]
 
 use napi::{Error, Result};
 use napi_derive::napi;
@@ -47,7 +45,7 @@ pub struct NotificationOptions {
 }
 
 /// Element-0 event: the user clicked a notification or one of its buttons.
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(target_os = "macos", ui_thread))]
 const NOTIFICATION_RESPONSE_EVENT: &str = "notificationResponse";
 
 /// Check the options and build GPUI's notification from them.
@@ -95,7 +93,7 @@ thread_local! {
         const { std::cell::RefCell::new(Vec::new()) };
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(ui_thread)]
 static PENDING: std::sync::Mutex<Vec<gpui::SystemNotificationResponse>> =
     std::sync::Mutex::new(Vec::new());
 
@@ -110,7 +108,7 @@ pub(crate) fn observe(cx: &mut gpui::App) {
     });
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(ui_thread)]
 pub(crate) fn observe(cx: &mut gpui::App) {
     cx.on_system_notification_response(|response, _cx| {
         PENDING.lock().unwrap().push(response);
@@ -118,7 +116,7 @@ pub(crate) fn observe(cx: &mut gpui::App) {
     });
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+#[cfg(not(any(target_os = "macos", ui_thread)))]
 pub(crate) fn observe(_cx: &mut gpui::App) {}
 
 /// Hand any held responses to the app renderer, if one is initialized.
@@ -132,7 +130,7 @@ pub(crate) fn deliver_pending() {
     deliver_responses(&callback, responses);
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(ui_thread)]
 pub(crate) fn deliver_pending() {
     let Some(callback) = crate::renderer::app_event_callback() else {
         return;
@@ -141,10 +139,10 @@ pub(crate) fn deliver_pending() {
     deliver_responses(&callback, responses);
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+#[cfg(not(any(target_os = "macos", ui_thread)))]
 pub(crate) fn deliver_pending() {}
 
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(target_os = "macos", ui_thread))]
 fn deliver_responses(
     callback: &crate::renderer::EventCallback,
     responses: Vec<gpui::SystemNotificationResponse>,
@@ -191,9 +189,9 @@ fn check_notification_daemon() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+#[cfg(not(any(target_os = "macos", ui_thread)))]
 fn unsupported(action: &str) -> Error {
-    Error::from_reason(format!("{action} is supported only on macOS and Linux"))
+    Error::from_reason(format!("{action} is supported only on macOS, Linux and Windows"))
 }
 
 /// Post a notification to the Notification Center. Posting a tag that is
@@ -217,7 +215,13 @@ pub fn show_notification(options: NotificationOptions) -> Result<()> {
             Ok(())
         })?
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(target_os = "windows")]
+    {
+        crate::renderer::with_ui_app("showNotification", move |cx| {
+            cx.show_system_notification(notification)
+        })
+    }
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         let _ = notification;
         Err(unsupported("showNotification"))
@@ -244,7 +248,13 @@ pub fn dismiss_notification(tag: String) -> Result<()> {
             "dismissNotification is not supported on Linux: GPUI's Linux backend does not support dismissing notifications",
         ))
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(target_os = "windows")]
+    {
+        crate::renderer::with_ui_app("dismissNotification", move |cx| {
+            cx.dismiss_system_notification(&tag)
+        })
+    }
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         Err(unsupported("dismissNotification"))
     }

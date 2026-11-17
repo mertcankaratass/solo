@@ -92,5 +92,8 @@ Notifications.
 
 ## Platforms
 
-Notifications work on macOS and Linux. On Windows, `showNotification` and
-`dismissNotification` throw, and `onNotificationResponse` never fires.
+Notifications work on macOS, Linux and Windows. On macOS outside a packaged
+app, `showNotification` and `dismissNotification` throw, because macOS delivers
+notifications only to app bundles with a `CFBundleIdentifier`. On Linux they go
+to the desktop notification daemon, and `dismissNotification` throws. On
+Windows they are Action Center toast notifications.
