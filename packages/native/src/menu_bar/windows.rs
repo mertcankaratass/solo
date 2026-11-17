@@ -672,14 +672,14 @@ impl MenuBar {
 
         let icon_path = update
             .as_ref()
-            .and_then(|u| u.icon_path.as_deref())
-            .unwrap_or(&guard.initial_icon_path);
+            .and_then(|u| u.icon_path.clone())
+            .unwrap_or_else(|| guard.initial_icon_path.clone());
 
         if icon_path != guard.current_icon_path {
-            let new_icon = load_hicon(icon_path)?;
+            let new_icon = load_hicon(&icon_path)?;
             let old_icon = guard.hicon;
             guard.hicon = new_icon;
-            guard.current_icon_path = icon_path.to_string();
+            guard.current_icon_path = icon_path;
             if old_icon != 0 {
                 unsafe { DestroyIcon(old_icon) };
             }
