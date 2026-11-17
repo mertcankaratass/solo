@@ -1,5 +1,5 @@
 import { homedir, tmpdir } from "node:os"
-import { basename, dirname, isAbsolute, join } from "node:path"
+import path, { isAbsolute } from "node:path"
 import * as native from "@solo/native"
 
 /** Replaced at build time by `@solo/solid/vite` (see `appInfoDefine`). */
@@ -98,31 +98,32 @@ export function resolveAppPaths(input: AppPathsInput): AppPaths {
   if (identifier === null) {
     throw new Error('appPaths() needs the app identifier. Set "solo": { "identifier": "com.example.app" } in package.json')
   }
+  const p = platform === "win32" ? path.win32 : path.posix
   const resources = resourcesDirectory(input)
   if (platform === "darwin") {
-    const library = join(home, "Library")
-    const data = join(library, "Application Support", identifier)
+    const library = p.join(home, "Library")
+    const data = p.join(library, "Application Support", identifier)
     return {
       home,
       data,
       config: data,
-      cache: join(library, "Caches", identifier),
-      logs: join(library, "Logs", identifier),
+      cache: p.join(library, "Caches", identifier),
+      logs: p.join(library, "Logs", identifier),
       temp: input.temp,
       resources,
       executable: input.executable,
     }
   }
   if (platform === "win32") {
-    const appData = env.APPDATA || join(home, "AppData", "Roaming")
-    const localAppData = env.LOCALAPPDATA || join(home, "AppData", "Local")
-    const data = join(appData, identifier)
+    const appData = env.APPDATA || p.join(home, "AppData", "Roaming")
+    const localAppData = env.LOCALAPPDATA || p.join(home, "AppData", "Local")
+    const data = p.join(appData, identifier)
     return {
       home,
       data,
       config: data,
-      cache: join(localAppData, identifier, "cache"),
-      logs: join(localAppData, identifier, "logs"),
+      cache: p.join(localAppData, identifier, "cache"),
+      logs: p.join(localAppData, identifier, "logs"),
       temp: input.temp,
       resources,
       executable: input.executable,
@@ -131,27 +132,29 @@ export function resolveAppPaths(input: AppPathsInput): AppPaths {
   // XDG Base Directory: an unset, empty or relative variable means the default.
   const xdg = (name: string, fallback: string) => {
     const value = env[name]
-    return value && isAbsolute(value) ? value : join(home, fallback)
+    return value && p.isAbsolute(value) ? value : p.join(home, fallback)
   }
   return {
     home,
-    data: join(xdg("XDG_DATA_HOME", ".local/share"), identifier),
-    config: join(xdg("XDG_CONFIG_HOME", ".config"), identifier),
-    cache: join(xdg("XDG_CACHE_HOME", ".cache"), identifier),
-    logs: join(xdg("XDG_STATE_HOME", ".local/state"), identifier, "logs"),
+    data: p.join(xdg("XDG_DATA_HOME", ".local/share"), identifier),
+    config: p.join(xdg("XDG_CONFIG_HOME", ".config"), identifier),
+    cache: p.join(xdg("XDG_CACHE_HOME", ".cache"), identifier),
+    logs: p.join(xdg("XDG_STATE_HOME", ".local/state"), identifier, "logs"),
     temp: input.temp,
     resources,
     executable: input.executable,
   }
 }
 
-function resourcesDirectory({ platform, executable, root }: AppPathsInput): string {
-  const directory = dirname(executable)
-  if (platform === "darwin" && basename(directory) === "MacOS" && dirname(directory).endsWith(".app/Contents")) {
-    return join(dirname(directory), "Resources")
+function resourcesDirectory(input: AppPathsInput): string {
+  const { platform, executable, root } = input
+  const p = platform === "win32" ? path.win32 : path.posix
+  const directory = p.dirname(executable)
+  if (platform === "darwin" && p.basename(directory) === "MacOS" && p.dirname(directory).endsWith(".app/Contents")) {
+    return p.join(p.dirname(directory), "Resources")
   }
   // The same rule restartApplication uses for a compiled app binary.
-  const stem = basename(executable).replace(/\.exe$/, "")
+  const stem = p.basename(executable).replace(/\.exe$/, "")
   if (!["bun", "node", "nodejs"].includes(stem)) return directory
   if (root === null) {
     throw new Error("appPaths() could not find the project directory; build the app with @solo/solid/vite")
