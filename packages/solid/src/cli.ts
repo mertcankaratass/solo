@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /// `solo dev [root]`: rebuild the app on every change. On macOS only the app
-/// Worker is replaced, keeping GPUI and the window alive; on Linux a child
-/// process runs the app and is replaced under the same supervisor.
+/// Worker is replaced, keeping GPUI and the window alive; on Linux and Windows
+/// a child process runs the app and is replaced under the same supervisor.
 
 import { resolve } from "node:path"
 
@@ -26,10 +26,10 @@ if (process.platform === "darwin") {
     workerData: { soloDevRoot: resolve(root) },
   } as WorkerOptions)
   runMainLoop()
-} else if (process.platform === "linux") {
+} else if (process.platform === "linux" || process.platform === "win32") {
   const { runLinuxDev } = await import("./dev-linux.js")
   await runLinuxDev(root)
 } else {
-  console.error("solo dev supports macOS and Linux only for now")
+  console.error("solo dev supports macOS, Linux and Windows only for now")
   process.exit(1)
 }

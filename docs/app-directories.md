@@ -33,27 +33,29 @@ field is `null` when `package.json` leaves it out.
 
 ## Directories
 
-| Field | macOS | Linux |
-|---|---|---|
-| `data` | `~/Library/Application Support/<id>` | `$XDG_DATA_HOME/<id>` (`~/.local/share/<id>`) |
-| `config` | same as `data` | `$XDG_CONFIG_HOME/<id>` (`~/.config/<id>`) |
-| `cache` | `~/Library/Caches/<id>` | `$XDG_CACHE_HOME/<id>` (`~/.cache/<id>`) |
-| `logs` | `~/Library/Logs/<id>` | `$XDG_STATE_HOME/<id>/logs` (`~/.local/state/<id>/logs`) |
-| `home` | the user's home directory | the user's home directory |
-| `temp` | the system temporary directory | the system temporary directory |
-| `executable` | the running executable | the running executable |
-| `resources` | see below | see below |
+| Field | macOS | Linux | Windows |
+|---|---|---|---|
+| `data` | `~/Library/Application Support/<id>` | `$XDG_DATA_HOME/<id>` (`~/.local/share/<id>`) | `%APPDATA%\<id>` |
+| `config` | same as `data` | `$XDG_CONFIG_HOME/<id>` (`~/.config/<id>`) | same as `data` |
+| `cache` | `~/Library/Caches/<id>` | `$XDG_CACHE_HOME/<id>` (`~/.cache/<id>`) | `%LOCALAPPDATA%\<id>\Cache` |
+| `logs` | `~/Library/Logs/<id>` | `$XDG_STATE_HOME/<id>/logs` (`~/.local/state/<id>/logs`) | `%LOCALAPPDATA%\<id>\Logs` |
+| `home` | the user's home directory | the user's home directory | the user's home directory (`%USERPROFILE%`) |
+| `temp` | the system temporary directory | the system temporary directory | the system temporary directory (`%TEMP%`) |
+| `executable` | the running executable | the running executable | the running executable |
+| `resources` | see below | see below | see below |
 
 On Linux, an XDG variable that is unset, empty or relative falls back to its
 default, as the XDG Base Directory specification requires.
+
+On Windows, `%APPDATA%` and `%LOCALAPPDATA%` fall back to `%USERPROFILE%\AppData\Roaming`
+and `%USERPROFILE%\AppData\Local` when unset.
 
 `appPaths()` creates nothing. Call `ensureDir(path)` before writing: it creates
 the directory and any missing parents, returns the path, and throws for a
 relative path or when the directory cannot be created. It is native, so app
 code that only needs directories doesn't pull `node:fs` into the executable.
 
-`appPaths()` throws when `package.json` has no `solo.identifier`, and on
-Windows, which is not supported yet.
+`appPaths()` throws when `package.json` has no `solo.identifier`.
 
 ## Resources
 

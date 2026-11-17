@@ -69,7 +69,7 @@ export function appInfo(): AppInfo {
 
 /**
  * The app's standard directories on this platform. Throws when package.json
- * sets no `solo.identifier`, and on Windows.
+ * sets no `solo.identifier`.
  */
 export function appPaths(): AppPaths {
   return resolveAppPaths({
@@ -95,7 +95,6 @@ export function ensureDir(path: string): string {
 /** @internal */
 export function resolveAppPaths(input: AppPathsInput): AppPaths {
   const { platform, identifier, home, env } = input
-  if (platform === "win32") throw new Error("appPaths() is not supported on Windows yet")
   if (identifier === null) {
     throw new Error('appPaths() needs the app identifier. Set "solo": { "identifier": "com.example.app" } in package.json')
   }
@@ -109,6 +108,21 @@ export function resolveAppPaths(input: AppPathsInput): AppPaths {
       config: data,
       cache: join(library, "Caches", identifier),
       logs: join(library, "Logs", identifier),
+      temp: input.temp,
+      resources,
+      executable: input.executable,
+    }
+  }
+  if (platform === "win32") {
+    const appData = env.APPDATA || join(home, "AppData", "Roaming")
+    const localAppData = env.LOCALAPPDATA || join(home, "AppData", "Local")
+    const data = join(appData, identifier)
+    return {
+      home,
+      data,
+      config: data,
+      cache: join(localAppData, identifier, "cache"),
+      logs: join(localAppData, identifier, "logs"),
       temp: input.temp,
       resources,
       executable: input.executable,

@@ -61,17 +61,17 @@ pub fn open_external_url(url: String) -> Result<()> {
             "opening the browser URL",
         )
     }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(ui_thread)]
     {
         return crate::renderer::with_ui_platform("opening the browser URL", move |platform| {
             platform.open_url(&url);
         });
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         let _ = url;
         Err(Error::from_reason(
-            "External browser opening is supported only on macOS and Linux",
+            "External browser opening is supported only on macOS, Linux and Windows",
         ))
     }
 }
@@ -87,17 +87,17 @@ pub fn write_clipboard_text(text: String) -> Result<()> {
         macos::require_main_thread()?;
         macos::write_text(&objc2_app_kit::NSPasteboard::generalPasteboard(), &text)
     }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(ui_thread)]
     {
         return crate::renderer::with_ui_platform("writing clipboard text", move |platform| {
             platform.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         });
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         let _ = text;
         Err(Error::from_reason(
-            "Clipboard text writing is supported only on macOS and Linux",
+            "Clipboard text writing is supported only on macOS, Linux and Windows",
         ))
     }
 }
@@ -116,7 +116,7 @@ pub fn read_clipboard_text() -> Result<Option<String>> {
             &objc2_app_kit::NSPasteboard::generalPasteboard(),
         ))
     }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(ui_thread)]
     {
         return crate::renderer::with_ui_platform("reading the clipboard", |platform| {
             platform
@@ -125,10 +125,10 @@ pub fn read_clipboard_text() -> Result<Option<String>> {
                 .filter(|text| !text.is_empty())
         });
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         Err(Error::from_reason(
-            "Clipboard text reading is supported only on macOS and Linux",
+            "Clipboard text reading is supported only on macOS, Linux and Windows",
         ))
     }
 }
@@ -179,16 +179,16 @@ pub fn reveal_path(path: String) -> Result<()> {
             "showing the path in Finder",
         )
     }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(ui_thread)]
     {
         return crate::renderer::with_ui_platform("showing the path in the file manager", move |platform| {
             platform.reveal_path(std::path::Path::new(&path));
         });
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         Err(Error::from_reason(
-            "Showing a path in the file manager is supported only on macOS and Linux",
+            "Showing a path in the file manager is supported only on macOS, Linux and Windows",
         ))
     }
 }
@@ -212,16 +212,16 @@ pub fn open_path(path: String) -> Result<()> {
             "opening the path",
         )
     }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(ui_thread)]
     {
         return crate::renderer::with_ui_platform("opening the path", move |platform| {
             platform.open_with_system(std::path::Path::new(&path));
         });
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         Err(Error::from_reason(
-            "Opening a path with its default application is supported only on macOS and Linux",
+            "Opening a path with its default application is supported only on macOS, Linux and Windows",
         ))
     }
 }
@@ -287,11 +287,34 @@ impl Task for MoveToTrashTask {
                 })
                 .collect())
         }
-        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+        #[cfg(target_os = "windows")]
+        {
+            Ok(std::mem::take(&mut self.paths)
+                .into_iter()
+                .map(|path| match windows::trash(&path) {
+                    Ok(()) => TrashResult {
+                        path,
+                        ok: true,
+                        error: None,
+                    },
+                    Err(error) => TrashResult {
+                        path,
+                        ok: false,
+                        error: Some(error),
+                    },
+                })
+                .collect())
+        }
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "windows"
+        )))]
         {
             let _ = &mut self.paths;
             Err(Error::from_reason(
-                "Moving to the Trash is supported only on macOS and Linux",
+                "Moving to the Trash is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -379,6 +402,45 @@ mod linux {
         let stderr = stderr.trim();
         Err(if stderr.is_empty() {
             format!("gio trash failed with {}", output.status)
+        } else {
+            stderr.to_string()
+        })
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use std::path::Path;
+    use std::process::Command;
+
+    /// Move one item to the Windows Recycle Bin using Microsoft.VisualBasic FileSystem.
+    pub(super) fn trash(path: &str) -> std::result::Result<(), String> {
+        let p = Path::new(path);
+        if !p.exists() {
+            return Err(format!("{path}: The system cannot find the path specified."));
+        }
+        let method = if p.is_dir() {
+            "DeleteDirectory"
+        } else {
+            "DeleteFile"
+        };
+        let escaped_path = path.replace('\'', "''");
+        let script = format!(
+            "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::{method}('{escaped_path}', 'OnlyErrorDialogs', 'SendToRecycleBin')"
+        );
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .map_err(|error| {
+                format!("powershell is unavailable, so the Recycle Bin cannot be used: {error}")
+            })?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        Err(if stderr.is_empty() {
+            format!("powershell trash failed with {}", output.status)
         } else {
             stderr.to_string()
         })
@@ -506,11 +568,29 @@ mod tests {
 
     #[test]
     fn paths_must_be_absolute() {
-        assert!(validate_absolute_path("/tmp/a b").is_ok());
-        assert!(validate_absolute_path("/tmp/世界").is_ok());
-        for path in ["", "relative/file", "./file", "~/file", "/tmp/a\0b"] {
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(validate_absolute_path("/tmp/a b").is_ok());
+            assert!(validate_absolute_path("/tmp/世界").is_ok());
+        }
+        #[cfg(target_os = "windows")]
+        {
+            assert!(validate_absolute_path("C:\\tmp\\a b").is_ok());
+            assert!(validate_absolute_path("C:\\tmp\\世界").is_ok());
+        }
+        for path in ["", "relative/file", "./file", "~/file"] {
             let error = validate_absolute_path(path).unwrap_err();
             assert!(error.to_string().contains("absolute path"), "{path:?}: {error}");
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let error = validate_absolute_path("/tmp/a\0b").unwrap_err();
+            assert!(error.to_string().contains("absolute path"), "{error}");
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let error = validate_absolute_path("C:\\tmp\\a\0b").unwrap_err();
+            assert!(error.to_string().contains("absolute path"), "{error}");
         }
     }
 
@@ -591,5 +671,27 @@ mod tests {
         let missing = macos::trash(&manager, dir.join("missing").to_str().unwrap());
         assert!(!missing.unwrap_err().is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn trashes_files_and_folders_on_windows() {
+        let dir = std::env::temp_dir().join(format!("solo-trash-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("folder\\inner")).unwrap();
+        let file_path = dir.join("file 世界.txt");
+        let folder_path = dir.join("folder");
+        std::fs::write(&file_path, "x").unwrap();
+        std::fs::write(folder_path.join("inner\\nested.txt"), "y").unwrap();
+
+        super::windows::trash(file_path.to_str().unwrap()).unwrap();
+        assert!(!file_path.exists(), "file should be removed");
+
+        super::windows::trash(folder_path.to_str().unwrap()).unwrap();
+        assert!(!folder_path.exists(), "folder should be removed");
+
+        let missing = super::windows::trash(dir.join("missing").to_str().unwrap());
+        assert!(missing.is_err(), "missing path should return Err");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
