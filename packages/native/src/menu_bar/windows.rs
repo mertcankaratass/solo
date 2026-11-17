@@ -1,10 +1,10 @@
 //! Windows Taskbar Notification Area (System Tray) status item.
 //!
 //! On Windows, menu-bar applications live in the Taskbar Notification Area
-//! (System Tray) via Win32 `Shell_NotifyIconW`. Left-clicking or right-clicking
-//! displays a context menu containing application-defined items followed by
-//! the standard Open and Quit items. Left-clicking also emits
+//! (System Tray) via Win32 `Shell_NotifyIconW`. Left-clicking emits
 //! `applicationReopen`, matching macOS Dock clicks and Linux status-item clicks.
+//! Right-clicking displays a context menu containing application-defined items
+//! followed by the standard Open and Quit items.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -57,6 +57,9 @@ const TPM_RETURNCMD: u32 = 0x0100;
 const IMAGE_ICON: u32 = 1;
 const LR_LOADFROMFILE: u32 = 0x0010;
 const LR_DEFAULTSIZE: u32 = 0x0040;
+
+const SM_CXSMICON: i32 = 49;
+const SM_CYSMICON: i32 = 50;
 
 #[repr(C)]
 struct POINT {
@@ -172,6 +175,7 @@ extern "system" {
         cy: i32,
         fuLoad: u32,
     ) -> HICON;
+    fn GetSystemMetrics(nIndex: i32) -> i32;
 }
 
 #[link(name = "gdi32")]
@@ -305,6 +309,23 @@ fn load_hicon(path: &str) -> Result<HICON> {
         ))
     })?;
     let rgba = img.to_rgba8();
+    let cx = unsafe { GetSystemMetrics(SM_CXSMICON) };
+    let cy = unsafe { GetSystemMetrics(SM_CYSMICON) };
+    let (target_w, target_h) = if cx > 0 && cy > 0 {
+        (cx as u32, cy as u32)
+    } else {
+        (16, 16)
+    };
+    let rgba = if rgba.width() != target_w || rgba.height() != target_h {
+        image::imageops::resize(
+            &rgba,
+            target_w,
+            target_h,
+            image::imageops::FilterType::Lanczos3,
+        )
+    } else {
+        rgba
+    };
     let width = rgba.width() as i32;
     let height = rgba.height() as i32;
 
@@ -327,7 +348,17 @@ fn load_hicon(path: &str) -> Result<HICON> {
             "Failed to create color bitmap for menu-bar icon",
         ));
     }
-    let hbm_mask = unsafe { CreateBitmap(width, height, 1, 1, std::ptr::null()) };
+    let mask_bytes_per_row = ((width + 15) / 16) * 2;
+    let mask_data = vec![0u8; (mask_bytes_per_row * height) as usize];
+    let hbm_mask = unsafe {
+        CreateBitmap(
+            width,
+            height,
+            1,
+            1,
+            mask_data.as_ptr() as *const std::ffi::c_void,
+        )
+    };
     if hbm_mask == 0 {
         unsafe { DeleteObject(hbm_color) };
         return Err(Error::from_reason(
@@ -492,7 +523,6 @@ unsafe extern "system" fn wnd_proc(
                     APPLICATION_REOPEN_EVENT,
                     |_| {},
                 );
-                show_menu(state_arc);
                 return 0;
             } else if mouse_msg == WM_RBUTTONUP || mouse_msg == WM_CONTEXTMENU {
                 show_menu(state_arc);
