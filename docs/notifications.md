@@ -1,8 +1,9 @@
 # Notifications
 
-An app can post notifications to the macOS Notification Center or Linux desktop
-notification daemons, and hear when the user clicks one or one of its buttons.
-On macOS, notifications can also be replaced or dismissed by tag.
+An app can post notifications to the macOS Notification Center, Linux desktop
+notification daemons or the Windows Action Center, and hear when the user clicks
+one or one of its buttons. On macOS and Windows, notifications can also be
+dismissed by tag.
 
 ```tsx
 import { dismissNotification, onNotificationResponse, showNotification } from "@solo/solid"
@@ -26,7 +27,7 @@ dismissNotification("export")
 | function | behavior |
 |---|---|
 | `showNotification({ tag, title, body?, actions? })` | posts a notification; on macOS a tag still shown is replaced |
-| `dismissNotification(tag)` | on macOS: removes the notification with that tag. Throws on Linux. |
+| `dismissNotification(tag)` | on macOS and Windows: removes the notification with that tag. Throws on Linux. |
 | `onNotificationResponse(listener)` | receives `{ tag, actionId }` for each click; returns a function that stops listening |
 
 `tag` and `title` must be non-empty. Each action needs a non-empty `id` and
