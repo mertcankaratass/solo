@@ -272,7 +272,9 @@ mod windows {
         fn GetLastError() -> u32;
     }
 
-    fn target_name(app_id: &str, url: &str) -> Vec<u16> {
+    const CRED_MAX_CREDENTIAL_BLOB_SIZE: usize = 5 * 512; // 2560 bytes
+
+    pub(super) fn target_name(app_id: &str, url: &str) -> Vec<u16> {
         let name = format!("solo:{app_id}:{url}");
         name.encode_utf16().chain(Some(0)).collect()
     }
@@ -282,6 +284,14 @@ mod windows {
     }
 
     pub fn write(url: &str, username: &str, secret: &[u8], app_id: &str) -> Result<()> {
+        if secret.len() > CRED_MAX_CREDENTIAL_BLOB_SIZE {
+            return Err(Error::from_reason(format!(
+                "Secret length ({} bytes) exceeds Windows Credential Manager limit of {} bytes",
+                secret.len(),
+                CRED_MAX_CREDENTIAL_BLOB_SIZE
+            )));
+        }
+
         let mut target = target_name(app_id, url);
         let mut user = to_wide_null(username);
         let cred = CREDENTIALW {
@@ -359,7 +369,9 @@ mod windows {
             let slice = unsafe {
                 std::slice::from_raw_parts(cred.credential_blob, cred.credential_blob_size as usize)
             };
-            String::from_utf8_lossy(slice).to_string()
+            std::str::from_utf8(slice)
+                .map_err(|_| Error::from_reason("Stored credential secret is not valid UTF-8"))?
+                .to_string()
         };
 
         unsafe { CredFree(cred_ptr as *mut std::ffi::c_void) };
@@ -576,9 +588,9 @@ mod tests {
 
     #[test]
     fn resolves_default_app_id() {
-        assert_eq!(resolve_app_id(None), "dev.solo.app");
-        assert_eq!(resolve_app_id(Some("".into())), "dev.solo.app");
-        assert_eq!(resolve_app_id(Some("com.example.app".into())), "com.example.app");
+        assert!(resolve_app_id(None).is_err());
+        assert!(resolve_app_id(Some("".into())).is_err());
+        assert_eq!(resolve_app_id(Some("com.example.app".into())).unwrap(), "com.example.app");
     }
 
     #[cfg(target_os = "windows")]

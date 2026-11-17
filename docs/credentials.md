@@ -52,6 +52,8 @@ And an item label of `"<app_id> (<url>)"`. This guarantees that:
 
 On macOS, the keychain item is keyed by service URL. Per-app partitioning via `solo.identifier` is enforced on Linux.
 
+On Windows, credentials are saved in Windows Credential Manager as generic credentials keyed by `"solo:<app_id>:<url>"`. Windows Credential Manager limits a secret to 2,560 bytes (`CRED_MAX_CREDENTIAL_BLOB_SIZE`); longer secrets reject with an error.
+
 ## Error Handling & Security
 
 - **Secrets are never logged** or included in error messages.
