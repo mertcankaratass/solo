@@ -36,6 +36,12 @@ describe("posting notifications", () => {
     expect(() => notifications.showNotification({ tag: "t", title: "Title" })).toThrow(error)
   })
 
+  it("surfaces native errors when no notification daemon is available on Linux", () => {
+    const error = new Error("No notification daemon available on the session bus: NameHasNoOwner")
+    platform.showNotification.mockImplementationOnce(() => { throw error })
+    expect(() => notifications.showNotification({ tag: "t", title: "Title" })).toThrow(error)
+  })
+
   it("rejects arguments of the wrong type before dispatch", () => {
     expect(() => notifications.showNotification(undefined as never)).toThrow(TypeError)
     expect(() => notifications.showNotification({ tag: 1, title: "Title" } as never)).toThrow(TypeError)

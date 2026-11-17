@@ -2448,6 +2448,9 @@ impl SoloRenderer {
                         // Element-0 keyboard-layout events; see application.rs.
                         crate::application::observe(cx);
                         crate::screens::observe(cx);
+                        crate::notifications::observe(cx);
+                        let app_id = window_options.app_id.as_deref().unwrap_or("dev.solo.app");
+                        cx.set_app_identity(app_id, &title);
                         // Linux's PlatformWindow has no native prompts, and
                         // gpui's fallback ignores Enter/Escape.
                         cx.set_prompt_builder(crate::prompt::renderer);
@@ -2521,6 +2524,7 @@ impl SoloRenderer {
         // URLs that launched the app are queued behind init, so the JS side
         // has finished `init` before they arrive.
         crate::open_urls::deliver_pending();
+        crate::notifications::deliver_pending();
         Ok(())
     }
 

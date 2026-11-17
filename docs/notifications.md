@@ -1,7 +1,8 @@
 # Notifications
 
-An app can post notifications to the macOS Notification Center, replace or
-remove them by tag, and hear when the user clicks one or one of its buttons.
+An app can post notifications to the macOS Notification Center or Linux desktop
+notification daemons, replace or remove them by tag, and hear when the user
+clicks one or one of its buttons.
 
 ```tsx
 import { dismissNotification, onNotificationResponse, showNotification } from "@solo/solid"
@@ -46,6 +47,29 @@ To try notifications, package the app as a `.app` whose `Info.plist` sets
 `CFBundleIdentifier`, the same value as `solo.identifier` (see
 [app-directories.md](app-directories.md)).
 
+## Linux desktop notifications
+
+On Linux, notifications are posted over the D-Bus session bus to the running
+desktop notification server (such as GNOME Shell, Dunst, Mako, or
+`xfce4-notifyd`). The application name displayed on notifications is set from
+the app's window identity (`title` and `appId`).
+
+If no notification daemon is running on the session bus (for example under
+headless Xvfb), `showNotification` and `dismissNotification` fail immediately:
+
+```text
+No notification daemon available on the session bus: ...
+```
+
+### Daemon differences
+
+Linux notification servers follow the Desktop Notifications Specification, but
+their capabilities vary:
+- **Action buttons**: Servers that do not declare the `actions` capability
+  ignore notification buttons.
+- **Replacement by tag**: Some minimalist servers do not support replacing an
+  existing notification by identifier.
+
 ## Permission
 
 The first `showNotification` asks the user to allow notifications for the
@@ -70,6 +94,5 @@ Notifications.
 
 ## Platforms
 
-Notifications work on macOS only for now. On Linux and Windows,
-`showNotification` and `dismissNotification` throw, and
-`onNotificationResponse` never fires.
+Notifications work on macOS and Linux. On Windows, `showNotification` and
+`dismissNotification` throw, and `onNotificationResponse` never fires.
