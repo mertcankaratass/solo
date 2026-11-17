@@ -37,8 +37,8 @@ field is `null` when `package.json` leaves it out.
 |---|---|---|---|
 | `data` | `~/Library/Application Support/<id>` | `$XDG_DATA_HOME/<id>` (`~/.local/share/<id>`) | `%APPDATA%\<id>` |
 | `config` | same as `data` | `$XDG_CONFIG_HOME/<id>` (`~/.config/<id>`) | same as `data` |
-| `cache` | `~/Library/Caches/<id>` | `$XDG_CACHE_HOME/<id>` (`~/.cache/<id>`) | `%LOCALAPPDATA%\<id>\Cache` |
-| `logs` | `~/Library/Logs/<id>` | `$XDG_STATE_HOME/<id>/logs` (`~/.local/state/<id>/logs`) | `%LOCALAPPDATA%\<id>\Logs` |
+| `cache` | `~/Library/Caches/<id>` | `$XDG_CACHE_HOME/<id>` (`~/.cache/<id>`) | `%LOCALAPPDATA%\<id>\cache` |
+| `logs` | `~/Library/Logs/<id>` | `$XDG_STATE_HOME/<id>/logs` (`~/.local/state/<id>/logs`) | `%LOCALAPPDATA%\<id>\logs` |
 | `home` | the user's home directory | the user's home directory | the user's home directory (`%USERPROFILE%`) |
 | `temp` | the system temporary directory | the system temporary directory | the system temporary directory (`%TEMP%`) |
 | `executable` | the running executable | the running executable | the running executable |

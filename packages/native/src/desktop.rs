@@ -410,40 +410,69 @@ mod linux {
 
 #[cfg(target_os = "windows")]
 mod windows {
+    use std::os::windows::ffi::OsStrExt;
     use std::path::Path;
-    use std::process::Command;
 
-    /// Move one item to the Windows Recycle Bin using Microsoft.VisualBasic FileSystem.
+    #[repr(C)]
+    struct SHFILEOPSTRUCTW {
+        hwnd: *mut std::ffi::c_void,
+        w_func: u32,
+        p_from: *const u16,
+        p_to: *const u16,
+        f_flags: u16,
+        f_any_operations_aborted: i32,
+        h_name_mappings: *mut std::ffi::c_void,
+        lpsz_progress_title: *const u16,
+    }
+
+    #[link(name = "Shell32")]
+    extern "system" {
+        fn SHFileOperationW(lpFileOp: *mut SHFILEOPSTRUCTW) -> i32;
+    }
+
+    const FO_DELETE: u32 = 0x0003;
+    const FOF_ALLOWUNDO: u16 = 0x0040;
+    const FOF_NOCONFIRMATION: u16 = 0x0010;
+    const FOF_NOERRORUI: u16 = 0x0400;
+    const FOF_SILENT: u16 = 0x0004;
+
+    /// Move one item to the Windows Recycle Bin using Win32 SHFileOperationW.
     pub(super) fn trash(path: &str) -> std::result::Result<(), String> {
         let p = Path::new(path);
         if !p.exists() {
             return Err(format!("{path}: The system cannot find the path specified."));
         }
-        let method = if p.is_dir() {
-            "DeleteDirectory"
-        } else {
-            "DeleteFile"
+
+        let full_path = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let path_str = full_path.to_str().unwrap_or(path);
+        let clean_path = path_str.strip_prefix(r"\\?\").unwrap_or(path_str);
+        let normalized_path = clean_path.replace('/', "\\");
+
+        // SHFileOperationW pFrom must be double-null terminated: path\0\0
+        let mut wide: Vec<u16> = std::ffi::OsStr::new(&normalized_path).encode_wide().collect();
+        wide.push(0);
+        wide.push(0);
+
+        let mut file_op = SHFILEOPSTRUCTW {
+            hwnd: std::ptr::null_mut(),
+            w_func: FO_DELETE,
+            p_from: wide.as_ptr(),
+            p_to: std::ptr::null(),
+            f_flags: FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT,
+            f_any_operations_aborted: 0,
+            h_name_mappings: std::ptr::null_mut(),
+            lpsz_progress_title: std::ptr::null(),
         };
-        let escaped_path = path.replace('\'', "''");
-        let script = format!(
-            "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::{method}('{escaped_path}', 'OnlyErrorDialogs', 'SendToRecycleBin')"
-        );
-        let output = Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-            .output()
-            .map_err(|error| {
-                format!("powershell is unavailable, so the Recycle Bin cannot be used: {error}")
-            })?;
-        if output.status.success() {
-            return Ok(());
-        }
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr = stderr.trim();
-        Err(if stderr.is_empty() {
-            format!("powershell trash failed with {}", output.status)
+
+        let result = unsafe { SHFileOperationW(&mut file_op) };
+        if result == 0 {
+            if file_op.f_any_operations_aborted != 0 {
+                return Err(format!("{path}: Trashing was aborted."));
+            }
+            Ok(())
         } else {
-            stderr.to_string()
-        })
+            Err(format!("{path}: SHFileOperationW failed with error code 0x{result:08X}"))
+        }
     }
 }
 
