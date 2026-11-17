@@ -60,42 +60,24 @@ mod linux {
     use super::*;
 
     fn map_oo7_error(err: oo7::Error, url: &str) -> Error {
-        match &err {
-            oo7::Error::Dismissed | oo7::Error::Cancelled => {
-                Error::from_reason("Keyring unlock prompt was dismissed")
-            }
-            oo7::Error::NoService => {
-                Error::from_reason("No Secret Service provider available on the session bus")
-            }
-            oo7::Error::ZBus(zbus_err) => {
-                let msg = zbus_err.to_string();
-                if msg.contains("ServiceUnknown")
-                    || msg.contains("org.freedesktop.secrets")
-                    || msg.contains("No such interface")
-                {
-                    Error::from_reason("No Secret Service provider available on the session bus")
-                } else {
-                    Error::from_reason(format!("Keyring operation failed for {url}: {err}"))
-                }
-            }
-            _ => {
-                let msg = err.to_string();
-                if msg.contains("ServiceUnknown")
-                    || msg.contains("org.freedesktop.secrets")
-                    || msg.contains("No such interface")
-                    || msg.contains("no secret service")
-                {
-                    Error::from_reason("No Secret Service provider available on the session bus")
-                } else if msg.contains("dismissed")
-                    || msg.contains("cancelled")
-                    || msg.contains("canceled")
-                    || msg.contains("Prompt")
-                {
-                    Error::from_reason("Keyring unlock prompt was dismissed")
-                } else {
-                    Error::from_reason(format!("Keyring operation failed for {url}: {msg}"))
-                }
-            }
+        let msg = err.to_string();
+        if msg.contains("ServiceUnknown")
+            || msg.contains("org.freedesktop.secrets")
+            || msg.contains("No such interface")
+            || msg.contains("no secret service")
+            || msg.contains("NoService")
+        {
+            Error::from_reason("No Secret Service provider available on the session bus")
+        } else if msg.contains("dismissed")
+            || msg.contains("cancelled")
+            || msg.contains("canceled")
+            || msg.contains("Prompt")
+            || msg.contains("Dismissed")
+            || msg.contains("Cancelled")
+        {
+            Error::from_reason("Keyring unlock prompt was dismissed")
+        } else {
+            Error::from_reason(format!("Keyring operation failed for {url}: {msg}"))
         }
     }
 
