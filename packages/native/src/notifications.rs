@@ -215,7 +215,7 @@ pub fn show_notification(options: NotificationOptions) -> Result<()> {
             check_notification_daemon()?;
             cx.show_system_notification(notification);
             Ok(())
-        })
+        })?
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
     {

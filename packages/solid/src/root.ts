@@ -15,6 +15,7 @@ import {
 import type { NativeRenderer } from "@solo/core"
 import type { Element as SolidElement } from "solid-js"
 import { automateWhenPiped } from "./automation-host.js"
+import { appInfo } from "./app.js"
 import { mount, mountWindowRoot, resetIdCounter } from "./runtime.js"
 import { requireCapability } from "./capability.js"
 import { receiveApplicationReopen, receiveDockMenuAction } from "./dock.js"
