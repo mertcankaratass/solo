@@ -17,12 +17,14 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2, ICoreWebView2Controller,
     ICoreWebView2NavigationCompletedEventArgs, ICoreWebView2NavigationStartingEventArgs,
     ICoreWebView2NewWindowRequestedEventArgs, ICoreWebView2Settings2,
-    ICoreWebView2WebMessageReceivedEventArgs, COREWEBVIEW2_WEB_ERROR_STATUS,
+    ICoreWebView2SourceChangedEventArgs, ICoreWebView2WebMessageReceivedEventArgs,
+    COREWEBVIEW2_WEB_ERROR_STATUS,
 };
 use webview2_com::{
     CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
     ExecuteScriptCompletedHandler, NavigationCompletedEventHandler,
-    NavigationStartingEventHandler, NewWindowRequestedEventHandler, WebMessageReceivedEventHandler,
+    NavigationStartingEventHandler, NewWindowRequestedEventHandler,
+    SourceChangedEventHandler, WebMessageReceivedEventHandler,
 };
 use windows::core::Interface;
 
@@ -126,6 +128,10 @@ struct WebViewState {
     pending_url: Option<String>,
     pending_html: Option<(String, Option<String>)>,
     pending_user_agent: Option<String>,
+    last_url: Option<String>,
+    last_html: Option<String>,
+    last_base_url: Option<String>,
+    last_user_agent: Option<String>,
     current_url: Option<String>,
     navigation: NavigationState,
     evaluations: HashMap<u64, EvaluateSender>,
@@ -140,6 +146,7 @@ struct WebViewState {
     token_navigation_completed: i64,
     token_new_window: i64,
     token_web_message: i64,
+    token_source_changed: i64,
 }
 
 impl WebViewState {
@@ -154,6 +161,10 @@ impl WebViewState {
             pending_url: None,
             pending_html: None,
             pending_user_agent: None,
+            last_url: None,
+            last_html: None,
+            last_base_url: None,
+            last_user_agent: None,
             current_url: None,
             navigation: NavigationState {
                 intercept: false,
@@ -164,7 +175,7 @@ impl WebViewState {
             evaluations: HashMap::new(),
             readiness: ReadinessState {
                 generation: 1,
-                ready: true,
+                ready: false,
                 waiters: HashMap::new(),
             },
             next_evaluation_id: 1,
@@ -177,6 +188,7 @@ impl WebViewState {
             token_navigation_completed: 0,
             token_new_window: 0,
             token_web_message: 0,
+            token_source_changed: 0,
         }
     }
 
@@ -302,6 +314,25 @@ impl WebViewState {
             }
         }
 
+        // 5. SourceChanged
+        {
+            let state = state_rc.clone();
+            let mut token = 0i64;
+            let handler = SourceChangedEventHandler::create(Box::new(move |_sender, args| {
+                let mut guard = state.borrow_mut();
+                if guard.destroyed {
+                    return Ok(());
+                }
+                if let Some(args) = args {
+                    guard.on_source_changed(&args);
+                }
+                Ok(())
+            }));
+            if unsafe { webview.add_SourceChanged(&handler, &mut token) }.is_ok() {
+                self.token_source_changed = token;
+            }
+        }
+
         self.controller = Some(controller);
         self.webview = Some(webview);
 
@@ -309,6 +340,9 @@ impl WebViewState {
             self.load_url_inner(&url);
         } else if let Some((html, base_url)) = self.pending_html.take() {
             self.load_html_inner(&html, base_url.as_deref());
+        } else {
+            // No initial url or html: view is mounted and ready for evaluation
+            self.mark_ready();
         }
     }
 
@@ -388,6 +422,25 @@ impl WebViewState {
         true
     }
 
+    fn on_source_changed(&mut self, args: &ICoreWebView2SourceChangedEventArgs) {
+        let mut is_new = windows::core::BOOL::default();
+        let is_new_doc = unsafe { args.IsNewDocument(&mut is_new) }.is_ok() && is_new.as_bool();
+        if !is_new_doc {
+            let current_url = self.query_current_url();
+            let navigation_id = self.navigation.next_id;
+            self.navigation.next_id = self.navigation.next_id.wrapping_add(1).max(1);
+            emit_navigation_request(
+                &self.callback,
+                self.element_id,
+                navigation_id,
+                current_url.clone(),
+                true,
+                false,
+            );
+            emit(&self.callback, self.element_id, EVENT_NAVIGATION, current_url);
+        }
+    }
+
     fn on_navigation_starting(&mut self, args: &ICoreWebView2NavigationStartingEventArgs) {
         let mut uri_pwstr = windows::core::PWSTR::null();
         let requested_url = if unsafe { args.Uri(&mut uri_pwstr) }.is_ok() && !uri_pwstr.is_null() {
@@ -395,12 +448,6 @@ impl WebViewState {
         } else {
             None
         };
-
-        let current = self.current_url.clone();
-        let same_document = requested_url
-            .as_deref()
-            .zip(current.as_deref())
-            .is_some_and(|(req, curr)| without_fragment(req) == without_fragment(curr));
 
         let mut user_initiated = windows::core::BOOL::default();
         let is_user_initiated =
@@ -412,23 +459,15 @@ impl WebViewState {
         let navigation_id = self.navigation.next_id;
         self.navigation.next_id = self.navigation.next_id.wrapping_add(1).max(1);
 
-        if same_document {
-            emit_navigation_request(
-                &self.callback,
-                self.element_id,
-                navigation_id,
-                requested_url.clone(),
-                true,
-                false,
-            );
-            let _ = unsafe { args.SetCancel(false) };
-        } else if controlled_load {
+        let mut cancelled = false;
+        if controlled_load {
             let _ = unsafe { args.SetCancel(false) };
         } else if !is_user_initiated {
             self.begin_document();
             let _ = unsafe { args.SetCancel(false) };
         } else if intercept {
             let _ = unsafe { args.SetCancel(true) };
+            cancelled = true;
             if let Some(url) = requested_url.clone() {
                 self.navigation.pending.insert(navigation_id, url);
             }
@@ -441,10 +480,13 @@ impl WebViewState {
                 false,
             );
         } else {
+            self.begin_document();
             let _ = unsafe { args.SetCancel(false) };
         }
 
-        emit(&self.callback, self.element_id, EVENT_NAVIGATION, requested_url);
+        if !cancelled {
+            emit(&self.callback, self.element_id, EVENT_NAVIGATION, requested_url);
+        }
     }
 
     fn on_navigation_completed(&mut self, args: &ICoreWebView2NavigationCompletedEventArgs) {
@@ -463,6 +505,11 @@ impl WebViewState {
         } else {
             let mut status = COREWEBVIEW2_WEB_ERROR_STATUS::default();
             let _ = unsafe { args.WebErrorStatus(&mut status) };
+            // Intercepted navigations cancelled with SetCancel(true) report status 23 (OPERATION_CANCELED).
+            // Do not emit loadError or mark failed for cancelled navigations.
+            if status.0 == 23 {
+                return;
+            }
             let reason = format!("Navigation failed with status {}", status.0);
             if self.mark_failed(&reason) {
                 let failure = match current_url {
@@ -535,6 +582,7 @@ impl WebViewState {
         let Some(webview) = self.webview.clone() else {
             self.pending_url = Some(url.to_string());
             self.pending_html = None;
+            self.begin_document();
             return;
         };
         self.begin_document();
@@ -555,6 +603,7 @@ impl WebViewState {
         let Some(webview) = self.webview.clone() else {
             self.pending_html = Some((html.to_string(), base_url.map(str::to_string)));
             self.pending_url = None;
+            self.begin_document();
             return;
         };
         self.begin_document();
@@ -562,7 +611,30 @@ impl WebViewState {
 
         let content = match base_url {
             Some(base) if !html.to_ascii_lowercase().contains("<base ") => {
-                format!("<base href=\"{base}\">{html}")
+                let escaped_base = base
+                    .replace('&', "&amp;")
+                    .replace('"', "&quot;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+                let base_tag = format!("<base href=\"{escaped_base}\">");
+                let lower = html.to_ascii_lowercase();
+                if let Some(pos) = lower.find("<head") {
+                    if let Some(close_rel) = html[pos..].find('>') {
+                        let insert_idx = pos + close_rel + 1;
+                        format!("{}{}{}", &html[..insert_idx], base_tag, &html[insert_idx..])
+                    } else {
+                        format!("{base_tag}{html}")
+                    }
+                } else if let Some(pos) = lower.find("<!doctype") {
+                    if let Some(close_rel) = html[pos..].find('>') {
+                        let insert_idx = pos + close_rel + 1;
+                        format!("{}{}{}", &html[..insert_idx], base_tag, &html[insert_idx..])
+                    } else {
+                        format!("{base_tag}{html}")
+                    }
+                } else {
+                    format!("{base_tag}{html}")
+                }
             }
             _ => html.to_string(),
         };
@@ -588,6 +660,9 @@ impl WebViewState {
             }
             if self.token_web_message != 0 {
                 let _ = unsafe { wv.remove_WebMessageReceived(self.token_web_message) };
+            }
+            if self.token_source_changed != 0 {
+                let _ = unsafe { wv.remove_SourceChanged(self.token_source_changed) };
             }
         }
         if let Some(controller) = self.controller.take() {
@@ -629,10 +704,12 @@ impl NativeViewInstance for WindowsWebView {
         let hwnd = windows::Win32::Foundation::HWND(host);
         guard.hwnd = Some(hwnd);
 
+        let app_id = crate::renderer::current_app_id();
         let user_data = std::env::var_os("LOCALAPPDATA")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(std::env::temp_dir)
-            .join("solo")
+            .join(app_id)
+            .join("cache")
             .join("webview2");
         let user_data_hstring = windows::core::HSTRING::from(user_data.to_string_lossy().as_ref());
 
@@ -737,25 +814,68 @@ impl NativeViewInstance for WindowsWebView {
         }
         match key {
             PROP_URL => {
+                if value.is_some() && guard.last_html.is_some() {
+                    emit(
+                        &guard.callback,
+                        guard.element_id,
+                        EVENT_LOAD_ERROR,
+                        Some("WebView url and html are mutually exclusive".to_string()),
+                    );
+                    return;
+                }
+                if guard.last_url.as_deref() == value {
+                    return;
+                }
+                guard.begin_document();
+                guard.last_url = value.map(str::to_string);
                 if let Some(url) = value {
                     guard.load_url_inner(url);
                 }
             }
             PROP_HTML => {
+                if value.is_some() && guard.last_url.is_some() {
+                    emit(
+                        &guard.callback,
+                        guard.element_id,
+                        EVENT_LOAD_ERROR,
+                        Some("WebView url and html are mutually exclusive".to_string()),
+                    );
+                    return;
+                }
+                if guard.last_html.as_deref() == value {
+                    return;
+                }
+                guard.begin_document();
+                guard.last_html = value.map(str::to_string);
                 if let Some(html) = value {
-                    let base_url = guard.pending_html.as_ref().and_then(|(_, b)| b.clone());
+                    let base_url = guard.last_base_url.clone();
                     guard.load_html_inner(html, base_url.as_deref());
                 }
             }
             PROP_BASE_URL => {
-                let existing_html = guard
-                    .pending_html
-                    .as_ref()
-                    .map(|(h, _)| h.clone())
-                    .unwrap_or_default();
-                guard.pending_html = Some((existing_html, value.map(str::to_string)));
+                if value.is_some() && guard.last_url.is_some() {
+                    emit(
+                        &guard.callback,
+                        guard.element_id,
+                        EVENT_LOAD_ERROR,
+                        Some("WebView baseUrl requires html and cannot be used with url".to_string()),
+                    );
+                    return;
+                }
+                if guard.last_base_url.as_deref() == value {
+                    return;
+                }
+                guard.begin_document();
+                guard.last_base_url = value.map(str::to_string);
+                if let Some(html) = guard.last_html.clone() {
+                    guard.load_html_inner(&html, value);
+                }
             }
             PROP_USER_AGENT => {
+                if guard.last_user_agent.as_deref() == value {
+                    return;
+                }
+                guard.last_user_agent = value.map(str::to_string);
                 guard.pending_user_agent = value.map(str::to_string);
                 if let Some(webview) = guard.webview.clone() {
                     let _ = guard.apply_user_agent(&webview, value);

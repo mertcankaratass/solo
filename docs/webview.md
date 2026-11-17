@@ -65,6 +65,11 @@ Two intentional differences from macOS on Linux:
   `false` on Linux (new-window destinations never exist because Solo does
   not implement `create-web-view`).
 
+### Windows differences
+
+- **Base URL & Origin**: On Windows WebView2, inline HTML loaded via `NavigateToString` retains an opaque origin. Setting `baseUrl` injects a `<base href="...">` tag so relative URLs (scripts, images, stylesheets) resolve correctly against that base URL, but does not grant the document the base URL's origin (unlike WebKit's `loadHTMLString:baseURL:` on macOS).
+- **Per-app isolation**: WebView2 user data is stored under `%LOCALAPPDATA%\<app_id>\cache\webview2` (using the app's `solo.identifier`), ensuring cookies, cache, and `localStorage` are strictly isolated per application.
+
 ## Lifecycle
 
 Unmounted (or zero-area) views are destroyed or hidden rather than left
