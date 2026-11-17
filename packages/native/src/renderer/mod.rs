@@ -2450,7 +2450,8 @@ impl SoloRenderer {
                         crate::screens::observe(cx);
                         crate::notifications::observe(cx);
                         let app_id = window_options.app_id.as_deref().unwrap_or("dev.solo.app");
-                        cx.set_app_identity(app_id, &title);
+                        let app_name = window_options.app_name.as_deref().unwrap_or(&title);
+                        cx.set_app_identity(app_id, app_name);
                         // Linux's PlatformWindow has no native prompts, and
                         // gpui's fallback ignores Enter/Escape.
                         cx.set_prompt_builder(crate::prompt::renderer);
@@ -4257,6 +4258,7 @@ pub struct WindowOptions {
     /// `xdg_toplevel.app_id`, and should match the `.desktop` entry's
     /// `StartupWMClass`. Ignored on macOS and Windows.
     pub app_id: Option<String>,
+    pub app_name: Option<String>,
     pub title: Option<String>,
     pub width: Option<f64>,
     pub height: Option<f64>,

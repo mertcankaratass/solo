@@ -211,9 +211,10 @@ pub fn show_notification(options: NotificationOptions) -> Result<()> {
     }
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     {
-        check_notification_daemon()?;
         crate::renderer::with_ui_app("showNotification", move |cx| {
-            cx.show_system_notification(notification)
+            check_notification_daemon()?;
+            cx.show_system_notification(notification);
+            Ok(())
         })
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
@@ -238,10 +239,10 @@ pub fn dismiss_notification(tag: String) -> Result<()> {
     }
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     {
-        check_notification_daemon()?;
-        crate::renderer::with_ui_app("dismissNotification", move |cx| {
-            cx.dismiss_system_notification(&tag)
-        })
+        let _ = tag;
+        Err(Error::from_reason(
+            "dismissNotification is not supported on Linux: GPUI's Linux backend does not support dismissing notifications",
+        ))
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
     {

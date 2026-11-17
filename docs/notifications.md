@@ -1,8 +1,8 @@
 # Notifications
 
 An app can post notifications to the macOS Notification Center or Linux desktop
-notification daemons, replace or remove them by tag, and hear when the user
-clicks one or one of its buttons.
+notification daemons, and hear when the user clicks one or one of its buttons.
+On macOS, notifications can also be replaced or dismissed by tag.
 
 ```tsx
 import { dismissNotification, onNotificationResponse, showNotification } from "@solo/solid"
@@ -25,15 +25,15 @@ dismissNotification("export")
 
 | function | behavior |
 |---|---|
-| `showNotification({ tag, title, body?, actions? })` | posts a notification; a tag still shown is replaced |
-| `dismissNotification(tag)` | removes the notification with that tag, shown or still pending |
+| `showNotification({ tag, title, body?, actions? })` | posts a notification; on macOS a tag still shown is replaced |
+| `dismissNotification(tag)` | on macOS: removes the notification with that tag. Throws on Linux. |
 | `onNotificationResponse(listener)` | receives `{ tag, actionId }` for each click; returns a function that stops listening |
 
 `tag` and `title` must be non-empty. Each action needs a non-empty `id` and
 `label`, and ids must be unique within one notification; anything else
 throws before the notification is posted.
 
-## A packaged app
+## A packaged app (macOS)
 
 macOS delivers notifications only to an app bundle with a
 `CFBundleIdentifier`. Under `bun` or `solo dev`, and in a binary run outside
@@ -52,23 +52,21 @@ To try notifications, package the app as a `.app` whose `Info.plist` sets
 On Linux, notifications are posted over the D-Bus session bus to the running
 desktop notification server (such as GNOME Shell, Dunst, Mako, or
 `xfce4-notifyd`). The application name displayed on notifications is set from
-the app's window identity (`title` and `appId`).
+`solo.name` in `package.json` (falling back to the window title).
 
 If no notification daemon is running on the session bus (for example under
-headless Xvfb), `showNotification` and `dismissNotification` fail immediately:
+headless Xvfb), `showNotification` fails immediately:
 
 ```text
 No notification daemon available on the session bus: ...
 ```
 
-### Daemon differences
+### Platform differences
 
-Linux notification servers follow the Desktop Notifications Specification, but
-their capabilities vary:
-- **Action buttons**: Servers that do not declare the `actions` capability
-  ignore notification buttons.
-- **Replacement by tag**: Some minimalist servers do not support replacing an
-  existing notification by identifier.
+On Linux, GPUI's Linux backend does not send notification replacement IDs or
+support dismissing notifications; notifications age out automatically.
+`dismissNotification` throws on Linux. Action buttons are supported if the
+server declares the `actions` capability.
 
 ## Permission
 
