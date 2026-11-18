@@ -112,7 +112,7 @@ starts the native loop, and `index.app.js`, your app.
 native elements `div`, `text`, `img`, `svg`, `input`, `textarea`,
 `anchored`, `code`, `diff` (unified patches), `markdown` (GFM),
 `virtual-list` and `webview` (a real WKWebView on macOS, a WebKitGTK child
-window on Linux/X11).
+window on Linux/X11, WebView2 on Windows).
 
 **Styling.** A CSS-like subset (`StyleDesc`) applied natively: flexbox,
 borders, opacity, hover and active states, scrolling, and text metrics.
@@ -144,7 +144,8 @@ markdown code blocks is opt-in: build `@solo/native` with a `syntax-*`
 feature (`syntax-all` adds every grammar, about 8 MB). Without one, code
 renders as plain text.
 
-**Desktop integration (macOS).**
+**Desktop integration.** Everything below works on macOS. Linux and Windows
+coverage is listed under [Platform status](#platform-status).
 
 | Feature | API | Guide |
 |---|---|---|
@@ -178,7 +179,7 @@ bun run dev                    # runs `solo dev`
 ```
 
 On macOS, `solo dev` rebuilds on save and restarts only the app's Worker. On
-Linux it runs the app as a child process and replaces it after each good
+Linux and Windows it runs the app as a child process and replaces it after each good
 build; a crash waits for the next build, a clean exit ends the session.
 The process, GPUI and the window stay up, and the counter repaints about
 0.4 s after a save. App state starts fresh on each reload.
@@ -253,26 +254,35 @@ cd packages/native && cargo test --features test-support --lib --test layout_pro
 | Platform | Status |
 |---|---|
 | macOS | Primary. Windows, input, desktop APIs, `<webview>`, live automation and the GPU test renderer. |
-| Linux (Wayland, X11) | Windows and physical input, multiple windows (Solo-drawn tabs, document markers, close requests, window state, screens), client-side decorations, in-window context menus and alerts, status-item menu-bar apps, portal file dialogs, desktop actions and clipboard, freedesktop Trash and recent documents, system appearance, deep links and single-instance launches, `solo dev`, compiled production builds, live automation and the GPU test renderer. Platform limits are listed under [Current boundaries](#current-boundaries). |
-| Windows | Builds in CI. Untested. |
+| Linux (Wayland, X11) | Windows and physical input, multiple windows (Solo-drawn tabs, document markers, close requests, window state, screens), client-side decorations, in-window context menus and alerts, status-item menu-bar apps, portal file dialogs, desktop actions and clipboard, freedesktop Trash and recent documents, system appearance, deep links and single-instance launches, Secret Service credential storage, system notifications, `solo dev`, compiled production builds, live automation and the GPU test renderer. Platform limits are listed under [Current boundaries](#current-boundaries). |
+| Windows | Partial, and not tested in CI. A single window with input, Action Center notifications, Credential Manager storage, notification-area (tray) menu-bar apps, `<webview>` (WebView2), app directories, desktop actions, clipboard and `solo dev`. Missing APIs are listed under [Current boundaries](#current-boundaries). |
+
+Every platform builds in CI. The macOS and Linux test suites run in CI;
+Windows has none yet.
 
 ## Current boundaries
 
-- Not published to npm; there is no release pipeline yet.
+- Not published to npm. A pushed `v*` tag publishes the lean native bindings
+  for all six targets and the macOS menu helpers as a GitHub release.
 - Desktop integration is the same on macOS and Linux: desktop actions, file
   dialogs, alerts, multiple windows, window tabs, document windows, menus and
-  the application controls all work. Windows builds compile but are untested.
-  The macOS Dock menu and tab overview have no Linux counterpart:
-  `configureDockMenu` and `toggleTabOverview` throw, and
-  `onApplicationReopen` runs on a status-item click instead.
+  the application controls all work. The macOS Dock menu and tab overview
+  have no Linux counterpart: `configureDockMenu` and `toggleTabOverview`
+  throw, and `onApplicationReopen` runs on a status-item click instead.
 - Linux platform limits: live automation screenshots need X11;
-  `createThermalState` throws because GPUI has no Linux thermal feed; CSS
-  generic font families (`monospace`, `sans-serif`, `serif`) are not resolved,
-  so set a concrete family name.
-- `<webview>` is WKWebView on macOS and a WebKitGTK child window on
-  Linux/X11 only. There is no WebView2 backend, and embedding another
-  toolkit's surface is impossible on Wayland, so Linux on Wayland shows a
-  clear error instead.
+  `dismissNotification` and `createThermalState` throw (GPUI has no Linux
+  thermal feed); CSS generic font families (`monospace`, `sans-serif`,
+  `serif`) are not resolved, so set a concrete family name.
+- Windows has no multiple windows (`openWindow`), window state, close
+  requests, tabs, document windows, screens, context menus, deep links, Dock
+  calls, thermal state, hide/show applications, `beep` or GPU test renderer.
+  Those APIs throw or reject, and `onOpenUrls` never fires.
+  Application commands, file dialogs, alerts, system appearance and file drop
+  are compiled in but have not been exercised on Windows.
+- `<webview>` is WKWebView on macOS, a WebKitGTK child window on Linux/X11
+  and WebView2 on Windows. Embedding another toolkit's surface is impossible
+  on Wayland, so Linux on Wayland shows a clear error instead. Windows
+  reports an error when the WebView2 runtime is missing.
 - Native code has no hot reload: Rust changes need a rebuild and restart.
 - Solid is the only supported frontend. React support was removed.
 
