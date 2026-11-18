@@ -158,7 +158,7 @@ describe("appInfo", () => {
   it("reports what the Vite plugin injected from package.json", () => {
     // vitest runs packages/solid through solidUniversal(), so this is
     // @solo/solid's own manifest, which has no Solo identifier.
-    expect(solo.appInfo()).toEqual({ name: "@solo/solid", version: "0.4.0", identifier: null })
+    expect(solo.appInfo()).toEqual({ name: "@solo/solid", version: "2.0.1", identifier: null })
   })
 })
 

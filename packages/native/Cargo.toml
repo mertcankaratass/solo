@@ -1,6 +1,6 @@
 [package]
 name = "solo-native"
-version = "0.4.0"
+version = "2.0.1"
 edition = "2021"
 description = "GPUI bindings for Node.js via napi-rs"
 license = "Apache-2.0"

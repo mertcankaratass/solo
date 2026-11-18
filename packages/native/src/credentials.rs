@@ -528,7 +528,7 @@ impl Task for DeleteCredentialsTask {
 // ---------------------------------------------------------------------------
 
 /// Store a secret in the operating system's secure credential store.
-/// Rejects with an Error if the OS rejects the write, or off Linux/macOS.
+/// Rejects with an Error if the OS rejects the write, or off macOS, Linux and Windows.
 #[napi]
 pub fn write_credentials(
     url: String,

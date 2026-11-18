@@ -584,6 +584,18 @@ export declare function beep(): void
  */
 export declare function createDirectory(path: string): void
 
+/** A stored credential record. Secrets are never printed in Debug logs. */
+export interface CredentialResult {
+  username: string
+  secret: string
+}
+
+/**
+ * Remove a secret from the operating system's secure credential store.
+ * Returns true if an item was removed, false if no matching credential existed.
+ */
+export declare function deleteCredentials(url: string, appId?: string | undefined | null): Promise<boolean>
+
 /** Remove the notification posted with `tag`, shown or still pending. */
 export declare function dismissNotification(tag: string): void
 
@@ -810,6 +822,12 @@ export declare function openPath(path: string): void
 export declare function readClipboardText(): string | null
 
 /**
+ * Retrieve a secret from the operating system's secure credential store.
+ * Returns null when no credential matches `url`.
+ */
+export declare function readCredentials(url: string, appId?: string | undefined | null): Promise<CredentialResult | null>
+
+/**
  * Make this app the default handler for `scheme` (macOS 12+). The app must
  * run from a bundle with an identifier that Launch Services knows, and
  * should declare the scheme in its `Info.plist` (`CFBundleURLTypes`).
@@ -966,38 +984,8 @@ export interface WindowSize {
 /** Replace the system clipboard with plain Unicode text. macOS only. */
 export declare function writeClipboardText(text: string): void
 
-/** A stored credential record. */
-export interface CredentialResult {
-  username: string
-  secret: string
-}
-
 /**
  * Store a secret in the operating system's secure credential store.
- * Rejects with an Error if the OS rejects the write, or off Linux/macOS.
+ * Rejects with an Error if the OS rejects the write, or off macOS, Linux and Windows.
  */
-export declare function writeCredentials(
-  url: string,
-  username: string,
-  secret: string,
-  appId?: string | undefined | null,
-): Promise<void>
-
-/**
- * Retrieve a secret from the operating system's secure credential store.
- * Returns null when no credential matches `url`.
- */
-export declare function readCredentials(
-  url: string,
-  appId?: string | undefined | null,
-): Promise<CredentialResult | null>
-
-/**
- * Remove a secret from the operating system's secure credential store.
- * Returns true if an item was removed, false if no matching credential existed.
- */
-export declare function deleteCredentials(
-  url: string,
-  appId?: string | undefined | null,
-): Promise<boolean>
-
+export declare function writeCredentials(url: string, username: string, secret: string, appId?: string | undefined | null): Promise<void>

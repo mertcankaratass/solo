@@ -8,8 +8,8 @@ framework behind the Zed editor. There is no browser engine and no DOM: your
 JSX becomes native elements in a Rust tree, painted with Metal, Vulkan or
 DirectX.
 
-Solo is pre-1.0 (`0.4.0`) and is not published to npm. You build it from
-source. macOS is the primary platform; see [Platform status](#platform-status).
+Solo is stable as of `2.0.1` but is not published to npm yet. You build it
+from source. macOS is the primary platform; see [Platform status](#platform-status).
 
 ## Contents
 
