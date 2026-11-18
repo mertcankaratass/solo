@@ -57,7 +57,7 @@
   },
   "scripts": {
     "prepublishOnly": "node -e \"if (!process.env.CI) { console.error('Never publish @solo/solid locally. There is no automated release path; see AGENTS.md.'); process.exit(1) }\"",
-    "build": "rm -rf dist *.tsbuildinfo && tsc && chmod +x dist/cli.js",
+    "build": "rm -rf dist && tsc && bun -e \"require('node:fs').chmodSync('dist/cli.js', 0o755)\"",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",

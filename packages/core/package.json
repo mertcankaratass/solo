@@ -25,7 +25,7 @@
     "url": "https://github.com/0ctacity/solo"
   },
   "scripts": {
-    "build": "rm -rf dist *.tsbuildinfo && tsc",
+    "build": "rm -rf dist && tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest"
