@@ -51,6 +51,7 @@ jobs:
       with:
         cache: false
         rustflags: ''
+        build-warnings: ''
         target: ${{ matrix.target }}
     - name: Run Bindings
       run: uvx --from omniship==0.6.0 omniship run-node --stage build --node bindings --config omniship.yaml --export-artifacts .omniship/handoff/build-bindings

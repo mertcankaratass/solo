@@ -66,9 +66,10 @@ github = GitHubActions(
 pipeline = Pipeline(targets=[github])
 
 BUN = BunToolchain(version="1.4.4")
-# The toolchain comes from rust-toolchain.toml. rustflags "" keeps the action
-# from setting RUSTFLAGS="-D warnings"; lint policy stays in the crate.
-RUST_INPUTS = {"cache": False, "rustflags": ""}
+# The toolchain comes from rust-toolchain.toml. Empty rustflags and
+# build-warnings keep the action from setting RUSTFLAGS="-D warnings" and
+# CARGO_BUILD_WARNINGS=deny; lint policy stays in the crate.
+RUST_INPUTS = {"cache": False, "rustflags": "", "build-warnings": ""}
 SETUP_RUST = GitHubActionStep("setup-rust-toolchain", "Set up Rust", RUST_INPUTS)
 INSTALL_NEXTEST = GitHubActionStep(
     "taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f",  # v2.90.6
