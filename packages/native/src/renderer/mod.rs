@@ -74,6 +74,16 @@ pub(crate) fn to_element_id(id: f64) -> Result<u64> {
     Ok(id as u64)
 }
 
+static CURRENT_APP_ID: parking_lot::RwLock<Option<String>> = parking_lot::RwLock::new(None);
+
+pub fn set_current_app_id(app_id: &str) {
+    *CURRENT_APP_ID.write() = Some(app_id.to_string());
+}
+
+pub fn current_app_id() -> String {
+    CURRENT_APP_ID.read().clone().unwrap_or_else(|| "dev.solo.app".to_string())
+}
+
 #[cfg(test)]
 mod system_appearance_tests {
     use super::*;
@@ -2415,6 +2425,9 @@ impl SoloRenderer {
         }
 
         let title = options.title.clone().unwrap_or_else(|| "Solo".to_string());
+        if let Some(app_id) = options.app_id.as_deref() {
+            set_current_app_id(app_id);
+        }
         let window_options = options.clone();
         let tree = self.tree.clone();
         let selection = self.selection.clone();

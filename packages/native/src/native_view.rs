@@ -30,13 +30,15 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::c_void;
 
-/// WKWebView host. macOS-only: `<webview>` has no implementation elsewhere, so
-/// the element is simply not registered off macOS.
+/// Native webview hosts. macOS (WKWebView), Linux (WebKitGTK) and Windows (WebView2).
 #[cfg(target_os = "macos")]
 #[path = "native_view/webview_macos.rs"]
 pub mod webview;
 #[cfg(all(target_os = "linux", feature = "webview-linux"))]
 #[path = "native_view/webview_linux.rs"]
+pub mod webview;
+#[cfg(target_os = "windows")]
+#[path = "native_view/webview_windows.rs"]
 pub mod webview;
 
 /// The napi task that waits for a WebKit JavaScript evaluation.

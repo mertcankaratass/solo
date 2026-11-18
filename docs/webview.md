@@ -38,6 +38,10 @@ on macOS. Solo's host installs a controller the app can also drive directly
 ## Platform support
 
 - macOS: WKWebView as an AppKit subview.
+- Windows: Microsoft Edge WebView2 (Chromium-based) child view attached directly
+  to GPUI's Win32 HWND. Uses the system-installed Evergreen WebView2 Runtime
+  (pre-installed on modern Windows 10 and 11). If the runtime is absent, reports
+  a diagnostic `loadError` instead of crashing.
 - Linux (X11): a WebKitGTK child window. GTK runs on its own thread, so a
   build that includes `<webview>` links the system libraries `gtk-3`,
   `libwebkit2gtk-4.1` and the JavaScriptCore runtime; the `webview-linux`
@@ -60,6 +64,11 @@ Two intentional differences from macOS on Linux:
   bindings do not expose the target frame, so `isNewWindow` is always
   `false` on Linux (new-window destinations never exist because Solo does
   not implement `create-web-view`).
+
+### Windows differences
+
+- **Base URL & Origin**: On Windows WebView2, inline HTML loaded via `NavigateToString` retains an opaque origin. Setting `baseUrl` injects a `<base href="...">` tag so relative URLs (scripts, images, stylesheets) resolve correctly against that base URL, but does not grant the document the base URL's origin (unlike WebKit's `loadHTMLString:baseURL:` on macOS).
+- **Per-app isolation**: WebView2 user data is stored under `%LOCALAPPDATA%\<app_id>\webview2` (using the app's `solo.identifier`), ensuring cookies, cache, and `localStorage` are strictly isolated per application.
 
 ## Lifecycle
 

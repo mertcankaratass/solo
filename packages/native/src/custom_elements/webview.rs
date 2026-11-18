@@ -105,6 +105,8 @@ struct WebviewPlaceholder {
 enum Host {
     AppKit(*mut std::ffi::c_void),
     X11(u64),
+    #[cfg(target_os = "windows")]
+    Win32(isize),
     Wayland,
     Unavailable,
 }
@@ -126,6 +128,8 @@ impl WebviewPlaceholder {
         match handle.as_raw() {
             RawWindowHandle::AppKit(appkit) => Host::AppKit(appkit.ns_view.as_ptr()),
             RawWindowHandle::Xcb(xcb) => Host::X11(xcb.window.get() as u64),
+            #[cfg(target_os = "windows")]
+            RawWindowHandle::Win32(win32) => Host::Win32(win32.hwnd.get()),
             RawWindowHandle::Wayland(_) => Host::Wayland,
             _ => Host::Unavailable,
         }
@@ -194,10 +198,13 @@ impl Element for WebviewPlaceholder {
                 return;
             }
             Host::AppKit(_) | Host::X11(_) => {}
+            #[cfg(target_os = "windows")]
+            Host::Win32(_) => {}
         }
 
         // macOS: AppKit frames are bottom-left points, so flip. Linux: X is
         // top-left physical pixels, so scale and keep the origin as is.
+        // Windows: WebView2 bounds are top-left physical client pixels.
         let frame = {
             let x = f32::from(bounds.origin.x);
             let y = f32::from(bounds.origin.y);
@@ -218,13 +225,26 @@ impl Element for WebviewPlaceholder {
                     height: height * scale,
                 }
             }
+            #[cfg(target_os = "windows")]
+            {
+                let scale = window.scale_factor();
+                crate::native_view::NativeViewFrame {
+                    x: x * scale,
+                    y: y * scale,
+                    width: width * scale,
+                    height: height * scale,
+                }
+            }
         };
 
         // On Linux the host pointer carries the parent X window ID (see
         // `native_view/webview_linux.rs`): the mount reads it immediately.
+        // On Windows it carries the parent Win32 HWND.
         let host_ptr = match host {
             Host::AppKit(ptr) => ptr,
             Host::X11(id) => id as *mut std::ffi::c_void,
+            #[cfg(target_os = "windows")]
+            Host::Win32(hwnd) => hwnd as *mut std::ffi::c_void,
             Host::Wayland | Host::Unavailable => std::ptr::null_mut(),
         };
 
@@ -251,6 +271,12 @@ impl Element for WebviewPlaceholder {
                 #[cfg(all(target_os = "linux", not(feature = "webview-linux")))]
                 {
                     unreachable!("a webview without the webview-linux feature returned above")
+                }
+                #[cfg(target_os = "windows")]
+                {
+                    Box::new(crate::native_view::webview::WindowsWebView::new(
+                        element_id, callback,
+                    )) as Box<dyn crate::native_view::NativeViewInstance>
                 }
             });
             registry.update_frame(element_id, frame);
