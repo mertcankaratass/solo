@@ -4256,8 +4256,8 @@ pub(crate) fn window_size(window: &gpui::Window) -> WindowSize {
 pub struct WindowOptions {
     /// Application identifier the desktop groups the window under, such as
     /// `dev.solo.tasks`. On Linux it becomes X11 `WM_CLASS` and Wayland
-    /// `xdg_toplevel.app_id`, and should match the `.desktop` entry's
-    /// `StartupWMClass`. Ignored on macOS and Windows.
+    /// `xdg_toplevel.app_id` (matching `StartupWMClass`). On Windows it is used
+    /// as the AppUserModelID for notifications and taskbar grouping. Ignored on macOS.
     pub app_id: Option<String>,
     pub app_name: Option<String>,
     pub title: Option<String>,
