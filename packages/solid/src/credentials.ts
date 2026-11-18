@@ -60,6 +60,7 @@ function normalizeSecret(secret: unknown): string {
  * - Linux: stored in the Secret Service (GNOME Keyring / KWallet) with the app's
  *   `solo.identifier`, preventing cross-app or Zed conflicts (Issue #128).
  * - macOS: stored in the macOS Keychain (Issue #43).
+ * - Windows: stored in the Windows Credential Manager (Issue #144).
  *
  * Rejects with a clear error if the prompt is dismissed, no Secret Service
  * is available on Linux, or on unsupported platforms. Secrets are never logged.

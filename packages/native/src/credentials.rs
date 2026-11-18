@@ -227,6 +227,177 @@ mod linux {
 }
 
 // ---------------------------------------------------------------------------
+// Windows (Windows Credential Manager)
+// ---------------------------------------------------------------------------
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use super::*;
+
+    const CRED_TYPE_GENERIC: u32 = 1;
+    const CRED_PERSIST_LOCAL_MACHINE: u32 = 2;
+    const ERROR_NOT_FOUND: u32 = 1168;
+
+    #[repr(C)]
+    struct CREDENTIALW {
+        flags: u32,
+        r#type: u32,
+        target_name: *mut u16,
+        comment: *mut u16,
+        last_written: [u32; 2],
+        credential_blob_size: u32,
+        credential_blob: *mut u8,
+        persist: u32,
+        attribute_count: u32,
+        attributes: *mut std::ffi::c_void,
+        target_alias: *mut u16,
+        user_name: *mut u16,
+    }
+
+    #[link(name = "advapi32")]
+    extern "system" {
+        fn CredWriteW(credential: *const CREDENTIALW, flags: u32) -> i32;
+        fn CredReadW(
+            target_name: *const u16,
+            r#type: u32,
+            flags: u32,
+            credential: *mut *mut CREDENTIALW,
+        ) -> i32;
+        fn CredDeleteW(target_name: *const u16, r#type: u32, flags: u32) -> i32;
+        fn CredFree(buffer: *mut std::ffi::c_void);
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetLastError() -> u32;
+    }
+
+    const CRED_MAX_CREDENTIAL_BLOB_SIZE: usize = 5 * 512; // 2560 bytes
+
+    pub(super) fn target_name(app_id: &str, url: &str) -> Vec<u16> {
+        let name = format!("solo:{app_id}:{url}");
+        name.encode_utf16().chain(Some(0)).collect()
+    }
+
+    fn to_wide_null(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(Some(0)).collect()
+    }
+
+    pub fn write(url: &str, username: &str, secret: &[u8], app_id: &str) -> Result<()> {
+        if secret.len() > CRED_MAX_CREDENTIAL_BLOB_SIZE {
+            return Err(Error::from_reason(format!(
+                "Secret length ({} bytes) exceeds Windows Credential Manager limit of {} bytes",
+                secret.len(),
+                CRED_MAX_CREDENTIAL_BLOB_SIZE
+            )));
+        }
+
+        let mut target = target_name(app_id, url);
+        let mut user = to_wide_null(username);
+        let cred = CREDENTIALW {
+            flags: 0,
+            r#type: CRED_TYPE_GENERIC,
+            target_name: target.as_mut_ptr(),
+            comment: std::ptr::null_mut(),
+            last_written: [0, 0],
+            credential_blob_size: secret.len() as u32,
+            credential_blob: secret.as_ptr() as *mut u8,
+            persist: CRED_PERSIST_LOCAL_MACHINE,
+            attribute_count: 0,
+            attributes: std::ptr::null_mut(),
+            target_alias: std::ptr::null_mut(),
+            user_name: user.as_mut_ptr(),
+        };
+
+        let success = unsafe { CredWriteW(&cred, 0) };
+        if success != 0 {
+            Ok(())
+        } else {
+            let err = unsafe { GetLastError() };
+            Err(Error::from_reason(format!(
+                "Failed to write credentials for {url}: Windows error {err}"
+            )))
+        }
+    }
+
+    pub fn read(url: &str, app_id: &str) -> Result<Option<CredentialResult>> {
+        let target = target_name(app_id, url);
+        let mut cred_ptr: *mut CREDENTIALW = std::ptr::null_mut();
+        let success = unsafe {
+            CredReadW(
+                target.as_ptr(),
+                CRED_TYPE_GENERIC,
+                0,
+                &mut cred_ptr,
+            )
+        };
+
+        if success == 0 {
+            let err = unsafe { GetLastError() };
+            if err == ERROR_NOT_FOUND {
+                return Ok(None);
+            }
+            return Err(Error::from_reason(format!(
+                "Failed to read credentials for {url}: Windows error {err}"
+            )));
+        }
+
+        if cred_ptr.is_null() {
+            return Ok(None);
+        }
+
+        let cred = unsafe { &*cred_ptr };
+        let username = if cred.user_name.is_null() {
+            String::new()
+        } else {
+            let len = unsafe {
+                let mut p = cred.user_name;
+                let mut count = 0;
+                while *p != 0 {
+                    p = p.add(1);
+                    count += 1;
+                }
+                count
+            };
+            let slice = unsafe { std::slice::from_raw_parts(cred.user_name, len) };
+            String::from_utf16_lossy(slice)
+        };
+
+        let secret = if cred.credential_blob.is_null() || cred.credential_blob_size == 0 {
+            String::new()
+        } else {
+            let slice = unsafe {
+                std::slice::from_raw_parts(cred.credential_blob, cred.credential_blob_size as usize)
+            };
+            std::str::from_utf8(slice)
+                .map_err(|_| Error::from_reason("Stored credential secret is not valid UTF-8"))?
+                .to_string()
+        };
+
+        unsafe { CredFree(cred_ptr as *mut std::ffi::c_void) };
+
+        Ok(Some(CredentialResult { username, secret }))
+    }
+
+    pub fn delete(url: &str, app_id: &str) -> Result<bool> {
+        let target = target_name(app_id, url);
+        let success = unsafe { CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0) };
+        if success != 0 {
+            Ok(true)
+        } else {
+            let err = unsafe { GetLastError() };
+            if err == ERROR_NOT_FOUND {
+                Ok(false)
+            } else {
+                Err(Error::from_reason(format!(
+                    "Failed to delete credentials for {url}: Windows error {err}"
+                )))
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tasks for libuv worker pool
 // ---------------------------------------------------------------------------
 
@@ -252,10 +423,14 @@ impl Task for WriteCredentialsTask {
             gpui_apple::keychain::write_credentials(&self.url, &self.username, self.secret.as_bytes())
                 .map_err(|err| Error::from_reason(format!("Keychain write failed for {}: {err}", self.url)))
         }
-        #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "macos")))]
+        #[cfg(target_os = "windows")]
+        {
+            windows::write(&self.url, &self.username, self.secret.as_bytes(), &self.app_id)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "macos", target_os = "windows")))]
         {
             Err(Error::from_reason(
-                "Secure credential storage is supported only on Linux and macOS",
+                "Secure credential storage is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -291,10 +466,14 @@ impl Task for ReadCredentialsTask {
                 })
             }))
         }
-        #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "macos")))]
+        #[cfg(target_os = "windows")]
+        {
+            windows::read(&self.url, &self.app_id)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "macos", target_os = "windows")))]
         {
             Err(Error::from_reason(
-                "Secure credential storage is supported only on Linux and macOS",
+                "Secure credential storage is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -327,10 +506,14 @@ impl Task for DeleteCredentialsTask {
                 Err(err) => Err(Error::from_reason(format!("Keychain delete failed for {}: {err}", self.url))),
             }
         }
-        #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "macos")))]
+        #[cfg(target_os = "windows")]
+        {
+            windows::delete(&self.url, &self.app_id)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "macos", target_os = "windows")))]
         {
             Err(Error::from_reason(
-                "Secure credential storage is supported only on Linux and macOS",
+                "Secure credential storage is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -386,4 +569,35 @@ pub fn delete_credentials(
     validate_url(&url)?;
     let app_id = resolve_app_id(app_id)?;
     Ok(AsyncTask::new(DeleteCredentialsTask { url, app_id }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_empty_url_and_username() {
+        assert!(validate_url("").is_err());
+        assert!(validate_url("   ").is_err());
+        assert!(validate_url("https://example.com").is_ok());
+
+        assert!(validate_username("").is_err());
+        assert!(validate_username("   ").is_err());
+        assert!(validate_username("alice").is_ok());
+    }
+
+    #[test]
+    fn resolves_default_app_id() {
+        assert!(resolve_app_id(None).is_err());
+        assert!(resolve_app_id(Some("".into())).is_err());
+        assert_eq!(resolve_app_id(Some("com.example.app".into())).unwrap(), "com.example.app");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_target_name_format() {
+        let name = windows::target_name("my.app", "https://api.github.com");
+        let decoded = String::from_utf16_lossy(&name[..name.len() - 1]);
+        assert_eq!(decoded, "solo:my.app:https://api.github.com");
+    }
 }

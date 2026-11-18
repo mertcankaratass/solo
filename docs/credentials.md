@@ -4,6 +4,7 @@ Solo apps can store and retrieve sensitive credentials (tokens, passwords, API k
 
 - **Linux:** Backed by the **Secret Service API** (GNOME Keyring, KWallet) over D-Bus via the `oo7` crate ([#128](https://github.com/octacity-org/solo/issues/128)). Credentials are partitioned by the application's `solo.identifier` so that separate apps and Zed credentials never conflict.
 - **macOS:** Backed by the **macOS Keychain** ([#43](https://github.com/octacity-org/solo/issues/43)).
+- **Windows:** Backed by the **Windows Credential Manager** ([#144](https://github.com/octacity-org/solo/issues/144)) using `CredWriteW`, `CredReadW`, and `CredDeleteW`. Credentials are keyed as `"solo:<app_id>:<url>"` to prevent collisions across applications.
 
 ```tsx
 import { credentials } from "@solo/solid"
@@ -50,6 +51,8 @@ And an item label of `"<app_id> (<url>)"`. This guarantees that:
 - Solo apps do not collide with Zed editor credentials (which use the hardcoded `zed-github-account` label).
 
 On macOS, the keychain item is keyed by service URL. Per-app partitioning via `solo.identifier` is enforced on Linux.
+
+On Windows, credentials are saved in Windows Credential Manager as generic credentials keyed by `"solo:<app_id>:<url>"`. Windows Credential Manager limits a secret to 2,560 bytes (`CRED_MAX_CREDENTIAL_BLOB_SIZE`); longer secrets reject with an error.
 
 ## Error Handling & Security
 
