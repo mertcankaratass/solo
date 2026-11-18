@@ -15,6 +15,7 @@ import {
 import type { NativeRenderer } from "@solo/core"
 import type { Element as SolidElement } from "solid-js"
 import { automateWhenPiped } from "./automation-host.js"
+import { appInfo } from "./app.js"
 import { mount, mountWindowRoot, resetIdCounter } from "./runtime.js"
 import { requireCapability } from "./capability.js"
 import { receiveApplicationReopen, receiveDockMenuAction } from "./dock.js"
@@ -156,6 +157,8 @@ export interface OpenWindowOptions extends Omit<WindowOptions, "menuBar"> {
    * `app_id`, and should match the desktop entry's `StartupWMClass`.
    */
   appId?: string
+  /** The application name shown in notifications and system UI. */
+  appName?: string
   /** Called once after the window closes, however it closed. */
   onClose?: () => void
   /** Confirm or cancel closing; close with `close()`. */
@@ -169,6 +172,8 @@ export interface RenderOptions extends WindowOptions {
    * `app_id`, and should match the desktop entry's `StartupWMClass`.
    */
   appId?: string
+  /** The application name shown in notifications and system UI. */
+  appName?: string
   onEvent?: (event: EventPayload) => void
   /** Confirm or cancel closing the main window; close with `closeWindow()`. */
   onCloseRequest?: CloseRequestHandler
@@ -332,8 +337,14 @@ export function render(code: () => SolidElement, options: RenderOptions = {}): R
     if (slot.renderer !== options.renderer) slot.closeGuarded = false
     slot.renderer = options.renderer
   } else if (!slot.renderer) {
+    const info = appInfo()
+    const optionsWithDefaults: RenderOptions = {
+      ...options,
+      appId: options.appId ?? info.identifier ?? undefined,
+      appName: options.appName ?? info.name ?? undefined,
+    }
     const renderer = createNativeRenderer(options.onEvent)
-    renderer.init(options)
+    renderer.init(optionsWithDefaults)
     slot.renderer = renderer
   }
   const host = slot.renderer as NativeRenderer

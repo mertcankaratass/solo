@@ -896,6 +896,7 @@ export interface WindowOptions {
    * `StartupWMClass`. Ignored on macOS and Windows.
    */
   appId?: string
+  appName?: string
   title?: string
   width?: number
   height?: number

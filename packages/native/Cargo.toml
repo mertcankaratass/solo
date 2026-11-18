@@ -80,6 +80,9 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # blocking API runs the service on its own thread, so the UI thread never
 # awaits D-Bus.
 ksni = { version = "0.3", features = ["blocking"] }
+# `notifications`: Desktop Notifications over D-Bus. GPUI uses it internally;
+# Solo depends on it directly to check daemon availability before posting.
+notify-rust = { version = "4.18", default-features = false, features = ["zbus"] }
 # Linux credential storage through the Secret Service API (Issue #128).
 # oo7 is already in the graph through gpui_linux; pinned to the same version.
 oo7 = { version = "0.6.0", default-features = false, features = ["async-std", "native_crypto"] }

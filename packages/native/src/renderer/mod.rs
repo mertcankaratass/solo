@@ -2448,6 +2448,10 @@ impl SoloRenderer {
                         // Element-0 keyboard-layout events; see application.rs.
                         crate::application::observe(cx);
                         crate::screens::observe(cx);
+                        crate::notifications::observe(cx);
+                        let app_id = window_options.app_id.as_deref().unwrap_or("dev.solo.app");
+                        let app_name = window_options.app_name.as_deref().unwrap_or(&title);
+                        cx.set_app_identity(app_id, app_name);
                         // Linux's PlatformWindow has no native prompts, and
                         // gpui's fallback ignores Enter/Escape.
                         cx.set_prompt_builder(crate::prompt::renderer);
@@ -2521,6 +2525,7 @@ impl SoloRenderer {
         // URLs that launched the app are queued behind init, so the JS side
         // has finished `init` before they arrive.
         crate::open_urls::deliver_pending();
+        crate::notifications::deliver_pending();
         Ok(())
     }
 
@@ -4253,6 +4258,7 @@ pub struct WindowOptions {
     /// `xdg_toplevel.app_id`, and should match the `.desktop` entry's
     /// `StartupWMClass`. Ignored on macOS and Windows.
     pub app_id: Option<String>,
+    pub app_name: Option<String>,
     pub title: Option<String>,
     pub width: Option<f64>,
     pub height: Option<f64>,
@@ -4330,6 +4336,7 @@ impl Default for WindowOptions {
     fn default() -> Self {
         Self {
             app_id: None,
+            app_name: None,
             title: Some("Solo".to_string()),
             width: Some(800.0),
             height: Some(600.0),
