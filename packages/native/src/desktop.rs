@@ -61,17 +61,17 @@ pub fn open_external_url(url: String) -> Result<()> {
             "opening the browser URL",
         )
     }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(ui_thread)]
     {
         return crate::renderer::with_ui_platform("opening the browser URL", move |platform| {
             platform.open_url(&url);
         });
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         let _ = url;
         Err(Error::from_reason(
-            "External browser opening is supported only on macOS and Linux",
+            "External browser opening is supported only on macOS, Linux and Windows",
         ))
     }
 }
@@ -87,17 +87,17 @@ pub fn write_clipboard_text(text: String) -> Result<()> {
         macos::require_main_thread()?;
         macos::write_text(&objc2_app_kit::NSPasteboard::generalPasteboard(), &text)
     }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(ui_thread)]
     {
         return crate::renderer::with_ui_platform("writing clipboard text", move |platform| {
             platform.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         });
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         let _ = text;
         Err(Error::from_reason(
-            "Clipboard text writing is supported only on macOS and Linux",
+            "Clipboard text writing is supported only on macOS, Linux and Windows",
         ))
     }
 }
@@ -116,7 +116,7 @@ pub fn read_clipboard_text() -> Result<Option<String>> {
             &objc2_app_kit::NSPasteboard::generalPasteboard(),
         ))
     }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(ui_thread)]
     {
         return crate::renderer::with_ui_platform("reading the clipboard", |platform| {
             platform
@@ -125,10 +125,10 @@ pub fn read_clipboard_text() -> Result<Option<String>> {
                 .filter(|text| !text.is_empty())
         });
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         Err(Error::from_reason(
-            "Clipboard text reading is supported only on macOS and Linux",
+            "Clipboard text reading is supported only on macOS, Linux and Windows",
         ))
     }
 }
@@ -179,16 +179,16 @@ pub fn reveal_path(path: String) -> Result<()> {
             "showing the path in Finder",
         )
     }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(ui_thread)]
     {
         return crate::renderer::with_ui_platform("showing the path in the file manager", move |platform| {
             platform.reveal_path(std::path::Path::new(&path));
         });
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         Err(Error::from_reason(
-            "Showing a path in the file manager is supported only on macOS and Linux",
+            "Showing a path in the file manager is supported only on macOS, Linux and Windows",
         ))
     }
 }
@@ -212,16 +212,16 @@ pub fn open_path(path: String) -> Result<()> {
             "opening the path",
         )
     }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(ui_thread)]
     {
         return crate::renderer::with_ui_platform("opening the path", move |platform| {
             platform.open_with_system(std::path::Path::new(&path));
         });
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "macos", ui_thread)))]
     {
         Err(Error::from_reason(
-            "Opening a path with its default application is supported only on macOS and Linux",
+            "Opening a path with its default application is supported only on macOS, Linux and Windows",
         ))
     }
 }
@@ -287,11 +287,34 @@ impl Task for MoveToTrashTask {
                 })
                 .collect())
         }
-        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+        #[cfg(target_os = "windows")]
+        {
+            Ok(std::mem::take(&mut self.paths)
+                .into_iter()
+                .map(|path| match windows::trash(&path) {
+                    Ok(()) => TrashResult {
+                        path,
+                        ok: true,
+                        error: None,
+                    },
+                    Err(error) => TrashResult {
+                        path,
+                        ok: false,
+                        error: Some(error),
+                    },
+                })
+                .collect())
+        }
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "windows"
+        )))]
         {
             let _ = &mut self.paths;
             Err(Error::from_reason(
-                "Moving to the Trash is supported only on macOS and Linux",
+                "Moving to the Trash is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -382,6 +405,73 @@ mod linux {
         } else {
             stderr.to_string()
         })
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::Path;
+
+    #[repr(C)]
+    struct SHFILEOPSTRUCTW {
+        hwnd: *mut std::ffi::c_void,
+        w_func: u32,
+        p_from: *const u16,
+        p_to: *const u16,
+        f_flags: u16,
+        f_any_operations_aborted: i32,
+        h_name_mappings: *mut std::ffi::c_void,
+        lpsz_progress_title: *const u16,
+    }
+
+    #[link(name = "Shell32")]
+    extern "system" {
+        fn SHFileOperationW(lpFileOp: *mut SHFILEOPSTRUCTW) -> i32;
+    }
+
+    const FO_DELETE: u32 = 0x0003;
+    const FOF_ALLOWUNDO: u16 = 0x0040;
+    const FOF_NOCONFIRMATION: u16 = 0x0010;
+    const FOF_NOERRORUI: u16 = 0x0400;
+    const FOF_SILENT: u16 = 0x0004;
+
+    /// Move one item to the Windows Recycle Bin using Win32 SHFileOperationW.
+    pub(super) fn trash(path: &str) -> std::result::Result<(), String> {
+        let p = Path::new(path);
+        if p.symlink_metadata().is_err() {
+            return Err(format!("{path}: The system cannot find the path specified."));
+        }
+
+        let full_path = std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+        let path_str = full_path.to_str().unwrap_or(path);
+        let normalized_path = path_str.replace('/', "\\");
+
+        // SHFileOperationW pFrom must be double-null terminated: path\0\0
+        let mut wide: Vec<u16> = std::ffi::OsStr::new(&normalized_path).encode_wide().collect();
+        wide.push(0);
+        wide.push(0);
+
+        let mut file_op = SHFILEOPSTRUCTW {
+            hwnd: std::ptr::null_mut(),
+            w_func: FO_DELETE,
+            p_from: wide.as_ptr(),
+            p_to: std::ptr::null(),
+            f_flags: FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT,
+            f_any_operations_aborted: 0,
+            h_name_mappings: std::ptr::null_mut(),
+            lpsz_progress_title: std::ptr::null(),
+        };
+
+        let result = unsafe { SHFileOperationW(&mut file_op) };
+        if result == 0 {
+            if file_op.f_any_operations_aborted != 0 {
+                return Err(format!("{path}: Trashing was aborted."));
+            }
+            Ok(())
+        } else {
+            Err(format!("{path}: SHFileOperationW failed with error code 0x{result:08X}"))
+        }
     }
 }
 
@@ -506,11 +596,29 @@ mod tests {
 
     #[test]
     fn paths_must_be_absolute() {
-        assert!(validate_absolute_path("/tmp/a b").is_ok());
-        assert!(validate_absolute_path("/tmp/世界").is_ok());
-        for path in ["", "relative/file", "./file", "~/file", "/tmp/a\0b"] {
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(validate_absolute_path("/tmp/a b").is_ok());
+            assert!(validate_absolute_path("/tmp/世界").is_ok());
+        }
+        #[cfg(target_os = "windows")]
+        {
+            assert!(validate_absolute_path("C:\\tmp\\a b").is_ok());
+            assert!(validate_absolute_path("C:\\tmp\\世界").is_ok());
+        }
+        for path in ["", "relative/file", "./file", "~/file"] {
             let error = validate_absolute_path(path).unwrap_err();
             assert!(error.to_string().contains("absolute path"), "{path:?}: {error}");
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let error = validate_absolute_path("/tmp/a\0b").unwrap_err();
+            assert!(error.to_string().contains("absolute path"), "{error}");
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let error = validate_absolute_path("C:\\tmp\\a\0b").unwrap_err();
+            assert!(error.to_string().contains("absolute path"), "{error}");
         }
     }
 
@@ -591,5 +699,27 @@ mod tests {
         let missing = macos::trash(&manager, dir.join("missing").to_str().unwrap());
         assert!(!missing.unwrap_err().is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn trashes_files_and_folders_on_windows() {
+        let dir = std::env::temp_dir().join(format!("solo-trash-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("folder\\inner")).unwrap();
+        let file_path = dir.join("file 世界.txt");
+        let folder_path = dir.join("folder");
+        std::fs::write(&file_path, "x").unwrap();
+        std::fs::write(folder_path.join("inner\\nested.txt"), "y").unwrap();
+
+        super::windows::trash(file_path.to_str().unwrap()).unwrap();
+        assert!(!file_path.exists(), "file should be removed");
+
+        super::windows::trash(folder_path.to_str().unwrap()).unwrap();
+        assert!(!folder_path.exists(), "folder should be removed");
+
+        let missing = super::windows::trash(dir.join("missing").to_str().unwrap());
+        assert!(missing.is_err(), "missing path should return Err");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

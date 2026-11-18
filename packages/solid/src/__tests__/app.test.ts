@@ -29,6 +29,19 @@ const linux: AppPathsInput = {
   root: "/home/ada/tasks",
 }
 
+const windows: AppPathsInput = {
+  ...macos,
+  platform: "win32",
+  home: "C:\\Users\\ada",
+  temp: "C:\\Users\\ada\\AppData\\Local\\Temp",
+  executable: "C:\\Users\\ada\\.bun\\bin\\bun.exe",
+  root: "C:\\Users\\ada\\tasks",
+  env: {
+    APPDATA: "C:\\Users\\ada\\AppData\\Roaming",
+    LOCALAPPDATA: "C:\\Users\\ada\\AppData\\Local",
+  },
+}
+
 describe("app paths on macOS", () => {
   it("follows the Library conventions", () => {
     expect(resolveAppPaths(macos)).toEqual({
@@ -107,11 +120,30 @@ describe("app paths on Linux", () => {
   })
 })
 
-describe("app paths elsewhere", () => {
-  it("throws on Windows until it is implemented", () => {
-    expect(() => resolveAppPaths({ ...macos, platform: "win32" })).toThrow("not supported on Windows yet")
+describe("app paths on Windows", () => {
+  it("follows Windows AppData conventions", () => {
+    expect(resolveAppPaths(windows)).toEqual({
+      home: "C:\\Users\\ada",
+      data: "C:\\Users\\ada\\AppData\\Roaming\\dev.solo.tasks",
+      config: "C:\\Users\\ada\\AppData\\Roaming\\dev.solo.tasks",
+      cache: "C:\\Users\\ada\\AppData\\Local\\dev.solo.tasks\\cache",
+      logs: "C:\\Users\\ada\\AppData\\Local\\dev.solo.tasks\\logs",
+      temp: "C:\\Users\\ada\\AppData\\Local\\Temp",
+      resources: "C:\\Users\\ada\\tasks",
+      executable: "C:\\Users\\ada\\.bun\\bin\\bun.exe",
+    })
   })
 
+  it("falls back to default AppData paths when env variables are unset", () => {
+    const paths = resolveAppPaths({ ...windows, env: {} })
+    expect(paths.data).toBe("C:\\Users\\ada\\AppData\\Roaming\\dev.solo.tasks")
+    expect(paths.config).toBe("C:\\Users\\ada\\AppData\\Roaming\\dev.solo.tasks")
+    expect(paths.cache).toBe("C:\\Users\\ada\\AppData\\Local\\dev.solo.tasks\\cache")
+    expect(paths.logs).toBe("C:\\Users\\ada\\AppData\\Local\\dev.solo.tasks\\logs")
+  })
+})
+
+describe("app paths elsewhere", () => {
   it("explains a missing identifier", () => {
     expect(() => resolveAppPaths({ ...macos, identifier: null }))
       .toThrow('Set "solo": { "identifier": "com.example.app" } in package.json')

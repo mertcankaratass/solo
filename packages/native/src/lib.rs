@@ -5,6 +5,7 @@ mod application;
 mod automation;
 mod application_commands;
 mod custom_elements;
+mod credentials;
 mod desktop;
 mod diff;
 mod dock;
@@ -37,6 +38,7 @@ mod theme;
 #[cfg(all(feature = "test-support", any(target_os = "macos", target_os = "linux")))]
 mod test_renderer;
 
+pub use credentials::*;
 pub use element_tree::*;
 pub use renderer::*;
 pub use style::*;

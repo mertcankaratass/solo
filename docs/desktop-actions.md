@@ -14,8 +14,8 @@ try {
 
 Both functions are synchronous, return `void`, and throw catchable errors.
 They are independent of a Solid owner, so they work in button callbacks,
-application commands, and startup code. They support macOS and Linux once a
-Solo app is running; Windows and worker threads receive explicit errors.
+application commands, and startup code. They support macOS, Linux and Windows
+once a Solo app is running; worker threads receive explicit errors.
 Application code imports no internal Solo packages.
 
 ## Opening a URL
@@ -61,10 +61,10 @@ pasteboard as `writeClipboardText` and as paste inside `<input>` and
 as untrusted input, for example before opening it as a URL. Clipboard-change
 notifications are not exposed.
 
-On Linux both clipboard functions use GPUI's platform clipboard (the X11
-selection or the Wayland data device). Reading follows the same rule, except
-that GPUI cannot distinguish an empty text item from a clipboard without text,
-so an empty clipboard also reads as `null` there.
+On Linux and Windows both clipboard functions use GPUI's platform clipboard
+(the X11 selection, Wayland data device, or Windows clipboard). Reading follows
+the same rule, except that GPUI cannot distinguish an empty text item from a
+clipboard without text, so an empty clipboard also reads as `null` there.
 
 ## Showing and opening files
 
@@ -92,8 +92,11 @@ same default-application dispatch as a double-click. Without a desktop session
 or portal the request is delivered best-effort through `xdg-open`, which may
 fail silently; the calls still validate the path before dispatch.
 
+On Windows, `revealPath` highlights the item in File Explorer, and `openPath`
+opens the file or folder using its default associated Windows application.
+
 Applications decide which paths to open. Choosing a specific application
-("Open With…") is not supported. On Windows both throw after the path checks.
+("Open With…") is not supported.
 
 ## Moving to the Trash
 
@@ -107,9 +110,9 @@ for (const { path, ok, error } of results) if (!ok) console.warn(path, error)
 `moveToTrash(paths)` moves files and folders to the Trash, where the user can
 put them back, and resolves with one `{ path, ok, error? }` per input path, in
 input order. A path that cannot be moved (missing, no permission, a volume
-without a Trash) gets `ok: false` and macOS's reason; the other paths still
+without a Trash) gets `ok: false` and the platform's reason; the other paths still
 move. The promise rejects only when a path is not absolute or on platforms
-other than macOS.
+other than macOS, Linux and Windows.
 
 Unlike the actions above it is asynchronous: it runs `NSFileManager`
 `trashItemAtURL` on a background thread, because a large folder can take a
@@ -121,6 +124,12 @@ Trash can restore the item. `gio` is available with GLib on supported desktops;
 if it is missing, the result for that path is `ok: false` with an explanatory
 error. Files on system-internal mounts (for example `/tmp` on some systems)
 cannot be trashed by GLib and report the same kind of per-path error.
+
+On Windows, each path is moved to the Recycle Bin via the Windows Shell
+`SHFileOperationW` interface on a background worker thread, allowing the user to
+restore the item from the Recycle Bin. Note that on drives without a Recycle Bin,
+on network shares (UNC paths), or for files exceeding the Recycle Bin's quota,
+Windows may permanently delete the item without confirmation if it cannot be recycled.
 
 ## Verification
 

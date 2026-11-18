@@ -965,3 +965,39 @@ export interface WindowSize {
 
 /** Replace the system clipboard with plain Unicode text. macOS only. */
 export declare function writeClipboardText(text: string): void
+
+/** A stored credential record. */
+export interface CredentialResult {
+  username: string
+  secret: string
+}
+
+/**
+ * Store a secret in the operating system's secure credential store.
+ * Rejects with an Error if the OS rejects the write, or off Linux/macOS.
+ */
+export declare function writeCredentials(
+  url: string,
+  username: string,
+  secret: string,
+  appId?: string | undefined | null,
+): Promise<void>
+
+/**
+ * Retrieve a secret from the operating system's secure credential store.
+ * Returns null when no credential matches `url`.
+ */
+export declare function readCredentials(
+  url: string,
+  appId?: string | undefined | null,
+): Promise<CredentialResult | null>
+
+/**
+ * Remove a secret from the operating system's secure credential store.
+ * Returns true if an item was removed, false if no matching credential existed.
+ */
+export declare function deleteCredentials(
+  url: string,
+  appId?: string | undefined | null,
+): Promise<boolean>
+
