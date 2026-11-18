@@ -56,6 +56,7 @@ const NATIVE_EXPORTS = [
   "addRecentDocument",
   "beep",
   "createDirectory",
+  "deleteCredentials",
   "dismissNotification",
   "enableWorkerMainThread",
   "getKeyboardLayout",
@@ -67,6 +68,7 @@ const NATIVE_EXPORTS = [
   "openExternalUrl",
   "openPath",
   "readClipboardText",
+  "readCredentials",
   "registerUrlScheme",
   "requestProcessExit",
   "restartApplication",
@@ -77,6 +79,7 @@ const NATIVE_EXPORTS = [
   "showAllApplications",
   "showNotification",
   "writeClipboardText",
+  "writeCredentials",
 ]
 const BOOT_ID = "\0solo:boot"
 const APP_ID = "\0solo:app"
