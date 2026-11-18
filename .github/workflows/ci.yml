@@ -113,6 +113,12 @@ jobs:
         working-directory: .
         run: bun install
 
+      # napi runs `cargo metadata` without --locked before building, which
+      # silently rewrites a stale Cargo.lock, so check the lock first.
+      - name: Check Cargo.lock is up to date
+        run: cargo metadata --locked --format-version 1 > /dev/null
+        shell: bash
+
       - name: Build native
         run: ${{ matrix.settings.build }}
         shell: bash
@@ -121,7 +127,7 @@ jobs:
       # lean build, so check it too (napi cfg mistakes only fail there).
       - name: Check lean macOS build
         if: matrix.settings.target == 'aarch64-apple-darwin'
-        run: cargo check --release --no-default-features --target aarch64-apple-darwin
+        run: cargo check --locked --release --no-default-features --target aarch64-apple-darwin
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -181,6 +187,10 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Check Cargo.lock is up to date
+        working-directory: packages/native
+        run: cargo metadata --locked --format-version 1 > /dev/null
 
       # The test job does not download a build artifact: the Linux binding
       # must keep the automation feature, which the release matrix omits.
@@ -271,14 +281,14 @@ jobs:
         run: chmod +x packages/native/solo-context-menu.darwin-arm64
 
       - name: Test native menu helper protocol
-        run: cargo nextest run --manifest-path packages/native/context-menu-host/Cargo.toml
+        run: cargo nextest run --locked --manifest-path packages/native/context-menu-host/Cargo.toml
 
       - name: Build @solo/core
         run: bun run build
         working-directory: packages/core
 
       - name: Run native tests
-        run: cargo nextest run --features test-support --lib --test layout_probe
+        run: cargo nextest run --locked --features test-support --lib --test layout_probe
         working-directory: packages/native
 
       - name: Run @solo/solid tests
