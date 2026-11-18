@@ -327,15 +327,27 @@ rewrites them.
 
 ## Releasing
 
-There is no automated release path: CI builds and tests only, and the
-packages are not published anywhere. Public package manifests carry a
+CI and releases are an [OmniShip](https://github.com/octacity-org/omniship)
+pipeline. `workflow.py` is the source; `omniship.yaml`, `omniship.lock` and
+`.github/workflows/{check,build,ship}.yml` are generated from it. After
+editing `workflow.py`, run `omniship generate` and commit the results
+together; CI fails (`omniship generate --check`) when they are stale.
+
+- `build.yml` (CI) runs on pull requests and pushes to main: Check (Linux and
+  macOS test suites, the `Cargo.lock` check), then Build (lean
+  `build:release` bindings for all six targets and the macOS
+  `solo-context-menu` helpers).
+- `ship.yml` runs on a pushed `v*` tag and publishes those Build files as a
+  GitHub release; nothing else is released. Bump every package version
+  before tagging: the release does not compare the tag with them.
+
+The packages are not published to npm. Public package manifests carry a
 `prepublishOnly` guard that aborts a local `npm publish`, while `@solo/core`
-is explicitly private, so
-releasing takes a deliberate decision rather than an accidental version
-bump. When publishing returns, stand up a versioning workflow
-(changesets or equivalent) in the same change — `CHANGELOG.md` is
-frozen at 0.4.0 and still documents the removed `@solo/react`
-package.
+is explicitly private, so npm publishing takes a deliberate decision rather
+than an accidental version bump. When npm publishing returns, stand up a
+versioning workflow (changesets or equivalent) in the same change —
+`CHANGELOG.md` is frozen at 0.4.0 and still documents the removed
+`@solo/react` package.
 
 ## Examples
 
