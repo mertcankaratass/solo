@@ -172,6 +172,25 @@ def check(stage):
     @stage.task(
         requires=[BUN],
         execution=github.job(
+            runners=[GitHubRunner.WINDOWS_LATEST],
+            caches=[cargo_cache("windows-test", "windows-test-cargo-")],
+            before_steps=[SETUP_RUST],
+        ),
+    )
+    def windows_test(ctx):
+        # Windows has no GPU test renderer, so only the tasks suite runs: it
+        # drives a live app, which needs the automation feature.
+        run(ctx, "bun", "install")
+        run(ctx, "bun", "run", "build:release:full", cwd=NATIVE)
+        restore_generated_bindings(ctx)
+        run(ctx, "bun", "run", "build", cwd="packages/core")
+        run(ctx, "bun", "run", "build", cwd="packages/solid")
+        run(ctx, "bun", "run", "build:automation", cwd="examples/tasks")
+        run(ctx, "bun", "run", "test", cwd="examples/tasks")
+
+    @stage.task(
+        requires=[BUN],
+        execution=github.job(
             runners=[GitHubRunner.MACOS_LATEST],
             env=ENV,
             caches=[cargo_cache("macos-test", "macos-test-cargo-")],

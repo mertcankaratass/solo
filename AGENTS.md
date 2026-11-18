@@ -334,7 +334,8 @@ editing `workflow.py`, run `omniship generate` and commit the results
 together; CI fails (`omniship generate --check`) when they are stale.
 
 - `build.yml` (CI) runs on pull requests and pushes to main: Check (Linux and
-  macOS test suites, the `Cargo.lock` check), then Build (lean
+  macOS test suites, the `examples/tasks` automation suite on Windows, the
+  `Cargo.lock` check), then Build (lean
   `build:release` bindings for all six targets and the macOS
   `solo-context-menu` helpers).
 - `ship.yml` runs on a pushed `v*` tag and publishes those Build files as a

@@ -15,11 +15,13 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { launch } from "@solo/solid/automation"
 import type { App } from "@solo/solid/automation"
 
-const ENTRY = new URL("./dist/index.js", import.meta.url).pathname
+// fileURLToPath, not URL.pathname, which is "/D:/..." on Windows.
+const ENTRY = fileURLToPath(new URL("./dist/index.js", import.meta.url))
 
 // Vitest runs under Node, but on macOS a built Solo app runs under Bun.
 async function launchTasksApp(): Promise<App> {
@@ -158,6 +160,12 @@ describe("tasks app automation", () => {
       // during paint on the UI thread.
       await firstTask.getByTestId("checkbox-off").click()
       await firstTask.getByTestId("checkbox-on").waitFor({ timeoutMs: 5_000 })
+
+      if (process.platform === "win32") {
+        // captureScreenshot is implemented only on macOS and Linux/X11.
+        console.warn("[automation] Windows: skipped the screenshot")
+        return
+      }
 
       // CI keeps screenshots for failed runs by pointing this at an artifact
       // directory; a local run uses and removes a temp directory.

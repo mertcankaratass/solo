@@ -54,6 +54,40 @@ jobs:
         LIBGL_ALWAYS_SOFTWARE: '1'
         OMNISHIP_REF_TYPE: ${{ github.ref_type }}
         OMNISHIP_REF_NAME: ${{ github.ref_name }}
+  check-windows-test:
+    name: Check · Windows Test
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version: 1.4.4
+    - name: Restore cache 1
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: '~/.cargo/registry
+
+          ~/.cargo/git
+
+          packages/native/target/'
+        key: windows-test-cargo-${{ hashFiles('packages/native/Cargo.lock') }}
+        restore-keys: windows-test-cargo-
+    - name: Set up Rust
+      uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f
+      with:
+        cache: false
+        rustflags: ''
+        build-warnings: ''
+    - name: Run Windows Test
+      run: uvx --from omniship==0.6.0 omniship run-node --stage check --node windows-test --config omniship.yaml
+      env:
+        OMNISHIP_REF_TYPE: ${{ github.ref_type }}
+        OMNISHIP_REF_NAME: ${{ github.ref_name }}
   check-macos-test:
     name: Check · Macos Test
     needs: prepare
@@ -97,6 +131,7 @@ jobs:
     name: Check complete
     needs:
     - check-linux-test
+    - check-windows-test
     - check-macos-test
     runs-on: ubuntu-latest
     steps:

@@ -5,6 +5,10 @@ check:
     uses: core/python
     with:
       callable: workflow.py:pipeline:check:linux-test
+  windows-test:
+    uses: core/python
+    with:
+      callable: workflow.py:pipeline:check:windows-test
   macos-test:
     uses: core/python
     with:
