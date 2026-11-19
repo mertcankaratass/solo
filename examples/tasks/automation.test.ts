@@ -161,12 +161,6 @@ describe("tasks app automation", () => {
       await firstTask.getByTestId("checkbox-off").click()
       await firstTask.getByTestId("checkbox-on").waitFor({ timeoutMs: 5_000 })
 
-      if (process.platform === "win32") {
-        // captureScreenshot is implemented only on macOS and Linux/X11.
-        console.warn("[automation] Windows: skipped the screenshot")
-        return
-      }
-
       // CI keeps screenshots for failed runs by pointing this at an artifact
       // directory; a local run uses and removes a temp directory.
       const retained = process.env.SOLO_SCREENSHOT_DIR
