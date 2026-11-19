@@ -265,20 +265,36 @@ describe("tasks app automation", () => {
       expect(treeWithSecondary.windows ?? []).toHaveLength(1)
 
       // 5. Verify the secondary window sees the shared state (total tasks)
-      const tasksText = await waitForText(app, "Total tasks: 25")
-      expect(tasksText.some((entry) => entry.includes("Total tasks: 25"))).toBe(true)
+      const tasksElem = app.getByTestId("secondary-total-tasks")
+      await tasksElem.waitFor({ timeoutMs: 10_000 })
+      expect(await tasksElem.textContent()).toContain("Total tasks: 25")
 
       // 6. Click an element inside the secondary window (verifies automation routing across windows)
-      await waitForText(app, "Counter: 0")
+      const counterElem = app.getByTestId("secondary-counter")
+      await counterElem.waitFor({ timeoutMs: 10_000 })
+      expect(await counterElem.textContent()).toContain("Counter: 0")
 
       const incBtn = app.getByTestId("secondary-increment-btn")
       await incBtn.click()
-      await waitForText(app, "Counter: 1")
+
+      let counterText = await counterElem.textContent()
+      for (let i = 0; i < 20 && !counterText.includes("Counter: 1"); i++) {
+        await new Promise((r) => setTimeout(r, 100))
+        counterText = await counterElem.textContent()
+      }
+      expect(counterText).toContain("Counter: 1")
 
       // 7. Test window state manipulation from the secondary window
       const testStateBtn = app.getByTestId("secondary-test-state-btn")
       await testStateBtn.click()
-      await waitForText(app, "resized:true")
+
+      const stateLogElem = app.getByTestId("secondary-state-log")
+      let stateLogText = await stateLogElem.textContent()
+      for (let i = 0; i < 20 && !stateLogText.includes("resized:true"); i++) {
+        await new Promise((r) => setTimeout(r, 100))
+        stateLogText = await stateLogElem.textContent()
+      }
+      expect(stateLogText).toContain("resized:true")
 
       // 8. Test guarded close request: requestClose leaves window open
       const requestCloseBtn = app.getByTestId("secondary-request-close-btn")

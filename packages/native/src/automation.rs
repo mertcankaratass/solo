@@ -198,7 +198,7 @@ fn duration_ms(ms: f64) -> Duration {
     Duration::from_secs_f64((ms / 1000.0).max(0.0))
 }
 
-/// Every text node's content across all windows, depth first.
+/// Every text node's content under the main root, depth first.
 #[cfg(feature = "automation")]
 pub fn collect_text(tree: &crate::retained_tree::RetainedTree) -> Vec<String> {
     fn walk(tree: &crate::retained_tree::RetainedTree, id: u64, texts: &mut Vec<String>) {
@@ -215,9 +215,6 @@ pub fn collect_text(tree: &crate::retained_tree::RetainedTree) -> Vec<String> {
     let mut texts = Vec::new();
     if let Some(root) = tree.root_id {
         walk(tree, root, &mut texts);
-    }
-    for &window_root in &tree.window_roots {
-        walk(tree, window_root, &mut texts);
     }
     texts
 }
@@ -546,24 +543,5 @@ mod tests {
             error.contains("enter-totally-bogus"),
             "error should name the token, got {error:?}"
         );
-    }
-
-    #[test]
-    fn collect_text_gathers_from_main_and_secondary_windows() {
-        let mut tree = crate::retained_tree::RetainedTree::new();
-        tree.create_element(1, "div".into());
-        tree.create_element(2, "text".into());
-        tree.set_text(2, "Hello Main".into());
-        tree.append_child(1, 2);
-        tree.set_root(1);
-
-        tree.create_element(10, "div".into());
-        tree.create_element(11, "text".into());
-        tree.set_text(11, "Hello Secondary".into());
-        tree.append_child(10, 11);
-        tree.add_window_root(10).expect("window root added");
-
-        let texts = collect_text(&tree);
-        assert_eq!(texts, vec!["Hello Main", "Hello Secondary"]);
     }
 }
