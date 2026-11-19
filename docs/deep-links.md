@@ -69,8 +69,7 @@ system schemes such as `http`, `https`, `file` and `mailto`.
   second copy.
 - `solo dev` starts a new app Worker on every reload, so listeners from the
   previous build are gone and the new build subscribes afresh.
-- Windows does not deliver URLs: `onOpenUrls` never fires and
-  `registerUrlScheme` rejects.
+- Windows URL delivery: `registerUrlScheme` writes to `HKEY_CURRENT_USER\Software\Classes\<scheme>`. A second launch passes its URL arguments to the running instance over a per-user named pipe and exits, so there is never a second window. Cold launches deliver URLs once `onOpenUrls` subscribes.
 
 ## Linux
 
@@ -113,6 +112,35 @@ on a headless session can fall back to a browser because it cannot detect a
 desktop environment; a normal desktop delegates to the desktop's opener.
 The same limits as macOS apply: any app or page can send these URLs, so
 validate them.
+
+## Windows
+
+On Windows, Solo handles URL schemes and single-instance delivery using the
+Windows Registry and a per-user named pipe.
+
+**Launch.** URLs and file arguments passed to the executable arrive in
+`onOpenUrls`, queued until the first listener subscribes, enabling cold launches
+by link. A URL argument is used as is. An absolute path to a file becomes a
+`file://` URL. Flags and the JS entry run by Bun or Node are ignored.
+
+**Single instance.** The first launch creates and listens on a per-user named
+pipe `\\.\pipe\solo-open-urls-<name>-<hash>`. A second launch forwards its URLs
+and paths over the pipe and exits with status 0, so there is never a second
+window.
+
+**Registration.**
+
+```ts
+await registerUrlScheme("myapp")
+```
+
+writes the scheme keys under `HKEY_CURRENT_USER\Software\Classes\myapp`:
+- `(Default)`: `URL:myapp`
+- `URL Protocol`: `""`
+- `shell\open\command`: `"<executable>" "%1"` (or `"<executable>" "<script>" "%1"` under Bun or Node).
+
+A link opened in a browser or via `start myapp://…` executes this command and
+delivers the URL to `onOpenUrls`.
 
 ## Treat URLs as untrusted
 

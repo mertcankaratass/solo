@@ -273,9 +273,9 @@ other Windows features above are not covered by a test.
   throw, and `onApplicationReopen` runs on a status-item click instead.
 - Linux platform limits: live automation screenshots need X11;
   `createThermalState` throws (GPUI has no Linux thermal feed).
-- Windows has no deep links, Dock calls, thermal state, hide/show
-  applications, automation screenshots or GPU test renderer.
-  Those APIs throw or reject, and `onOpenUrls` never fires.
+- Windows has no Dock calls, thermal state, hide/show applications,
+  automation screenshots or GPU test renderer.
+  Those APIs throw or reject.
   Multiple windows (`openWindow`), window state, close requests, tabs,
   document windows, screens, context menus, `beep`, application commands,
   file dialogs, alerts, system appearance and file drop are compiled in but
