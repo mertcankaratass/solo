@@ -15,8 +15,8 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js"
-import { View, Text, Button } from "@solo/solid"
-import type { StyleDesc } from "@solo/solid"
+import { View, Text, Button, getScreens, openWindow } from "@solo/solid"
+import type { AppWindow, StyleDesc } from "@solo/solid"
 
 interface Task {
   id: number
@@ -147,11 +147,220 @@ function TaskRow(props: {
   )
 }
 
+function StatsWindow(props: {
+  tasks: () => Task[]
+  windowRef: () => AppWindow | undefined
+  closeRequested: () => boolean
+  onRequestCloseCalled: () => void
+  onConfirmedClose: () => void
+}) {
+  const [subCount, setSubCount] = createSignal(0)
+  const [stateLog, setStateLog] = createSignal("")
+
+  return (
+    <View
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        height: "100%",
+        backgroundColor: "#1e1e2e",
+        paddingLeft: 16,
+        paddingRight: 16,
+        paddingTop: 12,
+        paddingBottom: 12,
+      }}
+      testId="secondary-window-root"
+    >
+      <Text style={{ fontSize: 18, fontWeight: "bold", color: "#cdd6f4", marginBottom: 8 }}>
+        Task Statistics
+      </Text>
+      <Text testId="secondary-total-tasks" style={{ color: "#a6adc8", fontSize: 14 }}>
+        {`Total tasks: ${props.tasks().length}`}
+      </Text>
+      <Text testId="secondary-counter" style={{ color: "#a6adc8", fontSize: 14 }}>
+        {`Counter: ${subCount()}`}
+      </Text>
+      <Text testId="secondary-state-log" style={{ color: "#a6adc8", fontSize: 12 }}>
+        {stateLog()}
+      </Text>
+
+      {/* Button to click inside the secondary window */}
+      <div
+        testId="secondary-increment-btn"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+          backgroundColor: "#89b4fa",
+          borderRadius: 4,
+          cursor: "pointer",
+        }}
+        onClick={() => setSubCount((c) => c + 1)}
+      >
+        <Text style={{ color: "#11111b", fontWeight: "bold" }}>Increment</Text>
+      </div>
+
+      {/* Button to test window state: resize, maximize, fullscreen, background */}
+      <div
+        testId="secondary-test-state-btn"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+          backgroundColor: "#b4befe",
+          borderRadius: 4,
+          cursor: "pointer",
+        }}
+        onClick={() => {
+          const win = props.windowRef()
+          if (!win) return
+          const initialSize = win.size()
+          win.resize({ width: 420, height: 320 })
+          const resizedSize = win.size()
+
+          win.setBackground("transparent")
+          win.setBackground("opaque")
+
+          const wasMaximized = win.isMaximized()
+          win.maximize()
+          const isMaxNow = win.isMaximized()
+          win.restore()
+
+          win.toggleFullscreen()
+          win.toggleFullscreen()
+
+          win.setDocumentEdited(true)
+          const dummyPath = process.platform === "win32" ? "C:\\notes.txt" : "/tmp/notes.txt"
+          win.setDocumentPath(dummyPath)
+          win.setDocumentEdited(false)
+          win.setDocumentPath(null)
+
+          win.setTabbingIdentifier("stats-group")
+          let tabOverviewThrew = false
+          try {
+            win.toggleTabOverview()
+          } catch {
+            tabOverviewThrew = true
+          }
+
+          let charPaletteThrew = false
+          try {
+            win.showCharacterPalette()
+          } catch {
+            charPaletteThrew = true
+          }
+
+          win.setTitle("Task Statistics (Active)")
+          win.focus()
+
+          setStateLog(
+            `ok;size:${initialSize.width > 0};resized:${resizedSize.width > 0};tabThrew:${tabOverviewThrew};charThrew:${charPaletteThrew}`
+          )
+        }}
+      >
+        <Text style={{ color: "#11111b" }}>Test Window State</Text>
+      </div>
+
+      {/* Guarded close request trigger */}
+      <div
+        testId="secondary-request-close-btn"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+          backgroundColor: "#f9e2af",
+          borderRadius: 4,
+          cursor: "pointer",
+        }}
+        onClick={() => {
+          const win = props.windowRef()
+          win?.requestClose()
+        }}
+      >
+        <Text style={{ color: "#11111b" }}>Request Close</Text>
+      </div>
+
+      {/* Close confirmation button, shown when close was requested */}
+      <Show when={props.closeRequested()}>
+        <div
+          testId="secondary-confirm-close-btn"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginTop: 8,
+            paddingTop: 6,
+            paddingBottom: 6,
+            backgroundColor: "#f38ba8",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
+          onClick={() => {
+            props.onConfirmedClose()
+            props.windowRef()?.close()
+          }}
+        >
+          <Text style={{ color: "#11111b" }}>Confirm Close</Text>
+        </div>
+      </Show>
+    </View>
+  )
+}
+
 export function TasksApp() {
   // A store keeps every task object identity-stable: toggling mutates one
   // property in place so only that row's style/marker updates natively.
   const [tasks, setTasks] = createStore<Task[]>(makeTasks())
   const [draft, setDraft] = createSignal("")
+  let secondaryWindow: AppWindow | undefined
+  const [closeRequested, setCloseRequested] = createSignal(false)
+  const [secondaryClosed, setSecondaryClosed] = createSignal(false)
+
+  const openSecondary = () => {
+    if (secondaryWindow && !secondaryWindow.closed) {
+      secondaryWindow.focus()
+      return
+    }
+    setCloseRequested(false)
+    setSecondaryClosed(false)
+
+    const screens = getScreens()
+    const primaryScreen = screens.find((s) => s.primary) ?? screens[0]
+
+    secondaryWindow = openWindow(
+      () => (
+        <StatsWindow
+          tasks={() => tasks}
+          windowRef={() => secondaryWindow}
+          closeRequested={closeRequested}
+          onRequestCloseCalled={() => setCloseRequested(true)}
+          onConfirmedClose={() => setSecondaryClosed(true)}
+        />
+      ),
+      {
+        title: "Task Statistics",
+        width: 360,
+        height: 300,
+        screen: primaryScreen?.id,
+        onCloseRequest: () => {
+          setCloseRequested(true)
+        },
+        onClose: () => {
+          setSecondaryClosed(true)
+        },
+      }
+    )
+  }
 
   const addTask = () => {
     const title = draft().trim()
@@ -177,8 +386,34 @@ export function TasksApp() {
       }}
     >
       {/* Header */}
-      <View style={{ marginBottom: 8 }}>
+      <View
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        }}
+      >
         <Text style={{ fontSize: 20, fontWeight: "bold", color: "#cdd6f4" }}>Tasks</Text>
+        <div
+          testId="open-secondary-window"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingTop: 4,
+            paddingBottom: 4,
+            borderRadius: 5,
+            backgroundColor: "#313244",
+            cursor: "pointer",
+            hover: { backgroundColor: "#45475a" },
+          }}
+          onClick={openSecondary}
+        >
+          <Text style={{ color: "#cdd6f4", fontSize: 13 }}>Stats</Text>
+        </div>
       </View>
 
       {/* Scrollable task list */}

@@ -1,4 +1,4 @@
-//! Connected screens, and the screen a new window opens on (macOS, Linux).
+//! Connected screens, and the screen a new window opens on (macOS, Linux, Windows).
 //!
 //! A screen's `id` is its display UUID: it survives reconnects and restarts,
 //! while GPUI's numeric `DisplayId` may not. X11 has no UUID per screen — gpui
@@ -50,13 +50,25 @@ fn rect(bounds: gpui::Bounds<gpui::Pixels>) -> ScreenRect {
 }
 
 /// A stable id for a screen: its UUID where the platform reports one, and the
-/// X11 root index otherwise.
+/// X11/Windows root index otherwise.
 fn screen_id(display: &dyn gpui::PlatformDisplay, index: usize) -> String {
     display
         .uuid()
         .ok()
         .filter(|uuid| !uuid.is_nil())
-        .map_or_else(|| format!("x11-{index}"), |uuid| uuid.to_string())
+        .map_or_else(
+            || {
+                #[cfg(target_os = "windows")]
+                {
+                    format!("win-{index}")
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    format!("x11-{index}")
+                }
+            },
+            |uuid| uuid.to_string(),
+        )
 }
 
 /// The connected screens.
@@ -115,7 +127,7 @@ pub(crate) fn observe(cx: &mut gpui::App) {
     .detach();
 }
 
-/// The connected screens (macOS, Linux). Ids are stable display UUIDs, or
+/// The connected screens (macOS, Linux, Windows). Ids are stable display UUIDs, or
 /// `x11-<root index>` on X11, which has no per-screen UUID.
 #[napi]
 pub fn get_screens() -> Result<Vec<Screen>> {
@@ -145,7 +157,7 @@ pub fn get_screens() -> Result<Vec<Screen>> {
     #[cfg(all(not(target_os = "macos"), not(ui_thread)))]
     {
         Err(Error::from_reason(
-            "Listing screens is supported only on macOS and Linux",
+            "Listing screens is supported only on macOS, Linux and Windows",
         ))
     }
 }

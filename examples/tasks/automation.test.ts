@@ -244,6 +244,71 @@ describe("tasks app automation", () => {
     }
   }, 30_000)
 
+  it("opens a secondary window, clicks into it, toggles window state, and handles guarded close", async () => {
+    const app = await launchTasksApp()
+    try {
+      // 1. Initial tree only has main window
+      const initialTree = await app.call("getTree", {})
+      expect(initialTree.windows ?? []).toHaveLength(0)
+
+      // 2. Click the open-secondary-window button in the main window
+      const openBtn = app.getByTestId("open-secondary-window")
+      await openBtn.waitFor({ timeoutMs: 15_000 })
+      await openBtn.click()
+
+      // 3. Wait for the secondary window to appear in the tree
+      const secondaryRoot = app.getByTestId("secondary-window-root")
+      await secondaryRoot.waitFor({ timeoutMs: 10_000 })
+
+      // 4. Verify getTree() now includes the secondary window
+      const treeWithSecondary = await app.call("getTree", {})
+      expect(treeWithSecondary.windows ?? []).toHaveLength(1)
+
+      // 5. Verify the secondary window sees the shared state (total tasks)
+      const totalTasks = app.getByTestId("secondary-total-tasks")
+      await totalTasks.waitFor({ timeoutMs: 5_000 })
+      expect((await totalTasks.element()).text).toContain("Total tasks: 25")
+
+      // 6. Click an element inside the secondary window (verifies automation routing across windows)
+      const counterText = app.getByTestId("secondary-counter")
+      expect((await counterText.element()).text).toContain("Counter: 0")
+
+      const incBtn = app.getByTestId("secondary-increment-btn")
+      await incBtn.click()
+      await waitForText(app, "Counter: 1")
+
+      // 7. Test window state manipulation from the secondary window
+      const testStateBtn = app.getByTestId("secondary-test-state-btn")
+      await testStateBtn.click()
+      await waitForText(app, "resized:true")
+
+      // 8. Test guarded close request: requestClose leaves window open
+      const requestCloseBtn = app.getByTestId("secondary-request-close-btn")
+      await requestCloseBtn.click()
+
+      // The guarded close request fired, revealing the confirm close button
+      const confirmCloseBtn = app.getByTestId("secondary-confirm-close-btn")
+      await confirmCloseBtn.waitFor({ timeoutMs: 5_000 })
+
+      // Window is still open!
+      const treeStillOpen = await app.call("getTree", {})
+      expect(treeStillOpen.windows ?? []).toHaveLength(1)
+
+      // 9. Confirm and close the window
+      await confirmCloseBtn.click()
+
+      // 10. Wait for the secondary window to disappear from getTree
+      let finalTree = await app.call("getTree", {})
+      for (let i = 0; i < 20 && (finalTree.windows ?? []).length > 0; i++) {
+        await new Promise((r) => setTimeout(r, 100))
+        finalTree = await app.call("getTree", {})
+      }
+      expect(finalTree.windows ?? []).toHaveLength(0)
+    } finally {
+      await app.close()
+    }
+  }, 45_000)
+
   /** Poll `getAllText` until some entry contains `needle`. */
   async function waitForText(app: App, needle: string): Promise<string[]> {
     const deadline = Date.now() + 10_000
