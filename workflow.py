@@ -92,6 +92,16 @@ LAVAPIPE = {
 }
 
 
+LOAD_WINDOWS_BINDING = """
+const { readdirSync } = require("node:fs")
+const { resolve } = require("node:path")
+console.log("addons:", readdirSync(".").filter((name) => name.endsWith(".node")))
+const binding = resolve(`solo-native.win32-${process.arch}-msvc.node`)
+console.log("loading", binding)
+console.log("exports:", Object.keys(require(binding)).length)
+"""
+
+
 def cargo_cache(name, restore_prefix):
     return github.cache(
         paths=["~/.cargo/registry", "~/.cargo/git", f"{NATIVE}/target/"],
@@ -186,6 +196,9 @@ def check(stage):
         run(ctx, "bun", "install")
         run(ctx, "bun", "run", "build:release:full", cwd=NATIVE)
         restore_generated_bindings(ctx)
+        # Load the binding directly: napi's loader hides the real error in a
+        # `cause` that Bun does not print.
+        run(ctx, "bun", "-e", LOAD_WINDOWS_BINDING, cwd=NATIVE)
         run(ctx, "bun", "run", "build", cwd="packages/core")
         run(ctx, "bun", "run", "build", cwd="packages/solid")
         run(ctx, "bun", "run", "build:automation", cwd="examples/tasks")
