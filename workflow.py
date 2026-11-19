@@ -9,6 +9,7 @@ Run `omniship generate` after editing this file and commit the regenerated
 files with it.
 """
 
+import platform as platform_module
 import shutil
 import subprocess
 
@@ -92,14 +93,19 @@ LAVAPIPE = {
 }
 
 
-LOAD_WINDOWS_BINDING = """
-const { readdirSync } = require("node:fs")
+# Require a built binding directly. napi's loader hides a failed load in a
+# `cause` that Bun does not print; this fails with the real error.
+LOAD_BINDING = """
 const { resolve } = require("node:path")
-console.log("addons:", readdirSync(".").filter((name) => name.endsWith(".node")))
-const binding = resolve(`solo-native.win32-${process.arch}-msvc.node`)
+const binding = resolve(process.env.SOLO_BINDING)
 console.log("loading", binding)
 console.log("exports:", Object.keys(require(binding)).length)
 """
+
+
+def load_binding(ctx, suffix):
+    binding = f"solo-native.{suffix}.node"
+    run(ctx, "bun", "-e", LOAD_BINDING, cwd=NATIVE, env={"SOLO_BINDING": binding})
 
 
 def cargo_cache(name, restore_prefix):
@@ -196,9 +202,7 @@ def check(stage):
         run(ctx, "bun", "install")
         run(ctx, "bun", "run", "build:release:full", cwd=NATIVE)
         restore_generated_bindings(ctx)
-        # Load the binding directly: napi's loader hides the real error in a
-        # `cause` that Bun does not print.
-        run(ctx, "bun", "-e", LOAD_WINDOWS_BINDING, cwd=NATIVE)
+        load_binding(ctx, "win32-x64-msvc")
         run(ctx, "bun", "run", "build", cwd="packages/core")
         run(ctx, "bun", "run", "build", cwd="packages/solid")
         run(ctx, "bun", "run", "build:automation", cwd="examples/tasks")
@@ -281,6 +285,15 @@ def build(stage):
             run(ctx, "xcodebuild", "-downloadComponent", "MetalToolchain")
         run(ctx, "bun", "install")
         run(ctx, "bun", "run", "build:release", "--target", target, cwd=NATIVE)
+        # A binding that builds can still fail to load (a missing DLL export
+        # once broke every Windows build). Cross-compiled targets cannot load
+        # on the runner's architecture.
+        machine = platform_module.machine().lower()
+        host = "aarch64" if machine in ("arm64", "aarch64") else "x86_64"
+        if target.split("-")[0] == host:
+            load_binding(ctx, suffix)
+        else:
+            ctx.log.output(f"Skipping the load check: {target} does not run on {host}")
         ctx.artifacts.add(f"{NATIVE}/solo-native.{suffix}.node", platform=platform)
         if darwin:
             helper = f"solo-context-menu.{suffix}"
