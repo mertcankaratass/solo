@@ -237,7 +237,9 @@ function StatsWindow(props: {
           win.toggleFullscreen()
 
           win.setDocumentEdited(true)
-          const dummyPath = process.platform === "win32" ? "C:\\notes.txt" : "/tmp/notes.txt"
+          const isWindows =
+            (globalThis as { process?: { platform?: string } }).process?.platform === "win32"
+          const dummyPath = isWindows ? "C:\\notes.txt" : "/tmp/notes.txt"
           win.setDocumentPath(dummyPath)
           win.setDocumentEdited(false)
           win.setDocumentPath(null)
