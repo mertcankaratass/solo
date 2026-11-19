@@ -346,9 +346,8 @@ The packages are not published to npm. Public package manifests carry a
 `prepublishOnly` guard that aborts a local `npm publish`, while `@solo/core`
 is explicitly private, so npm publishing takes a deliberate decision rather
 than an accidental version bump. When npm publishing returns, stand up a
-versioning workflow (changesets or equivalent) in the same change —
-`CHANGELOG.md` is frozen at 0.4.0 and still documents the removed
-`@solo/react` package.
+versioning workflow (changesets or equivalent) in the same change. There is
+no `CHANGELOG.md`: the first release starts its history.
 
 ## Examples
 
