@@ -420,8 +420,8 @@ as it does on macOS, with these differences:
 
 ## Limits
 
-- Windows are macOS and Linux. On Windows `openWindow` throws, and so do the
-  render root's `setDocumentEdited` and `setDocumentPath`.
+- Everything on this page is tested on macOS and Linux. On Windows it is
+  compiled in through the same path as Linux, but has not been exercised.
 - New windows open centered on their screen; there is no option for an
   exact position yet.
 - File dialogs, the debug overlay, screenshots and clock control in the
