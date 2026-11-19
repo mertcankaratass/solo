@@ -86,6 +86,7 @@ jobs:
     - name: Run Windows Test
       run: uvx --from omniship==0.6.0 omniship run-node --stage check --node windows-test --config omniship.yaml
       env:
+        PYTHONUTF8: '1'
         OMNISHIP_REF_TYPE: ${{ github.ref_type }}
         OMNISHIP_REF_NAME: ${{ github.ref_name }}
   check-macos-test:

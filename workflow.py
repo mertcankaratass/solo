@@ -173,6 +173,9 @@ def check(stage):
         requires=[BUN],
         execution=github.job(
             runners=[GitHubRunner.WINDOWS_LATEST],
+            # OmniShip's log printer otherwise writes in the cp1252 console
+            # encoding and crashes on output such as vite's "✓".
+            env={"PYTHONUTF8": "1"},
             caches=[cargo_cache("windows-test", "windows-test-cargo-")],
             before_steps=[SETUP_RUST],
         ),
