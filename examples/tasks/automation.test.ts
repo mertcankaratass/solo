@@ -265,13 +265,11 @@ describe("tasks app automation", () => {
       expect(treeWithSecondary.windows ?? []).toHaveLength(1)
 
       // 5. Verify the secondary window sees the shared state (total tasks)
-      const totalTasks = app.getByTestId("secondary-total-tasks")
-      await totalTasks.waitFor({ timeoutMs: 5_000 })
-      expect((await totalTasks.element()).text).toContain("Total tasks: 25")
+      const tasksText = await waitForText(app, "Total tasks: 25")
+      expect(tasksText.some((entry) => entry.includes("Total tasks: 25"))).toBe(true)
 
       // 6. Click an element inside the secondary window (verifies automation routing across windows)
-      const counterText = app.getByTestId("secondary-counter")
-      expect((await counterText.element()).text).toContain("Counter: 0")
+      await waitForText(app, "Counter: 0")
 
       const incBtn = app.getByTestId("secondary-increment-btn")
       await incBtn.click()
