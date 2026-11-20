@@ -1074,7 +1074,7 @@ mod windows {
 
     fn start_named_pipe_listener(pipe: &str, sid: &str) -> PipeListenerResult {
         if let Err(error) = PipeSecurityDescriptor::for_user(sid) {
-            return PipeListenerResult::Failed(error.reason);
+            return PipeListenerResult::Failed(error.reason.clone());
         }
         let first = match create_pipe_instance(pipe, sid, true) {
             Ok(handle) => handle,
