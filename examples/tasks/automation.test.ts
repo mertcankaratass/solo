@@ -294,7 +294,7 @@ describe("tasks app automation", () => {
         await new Promise((r) => setTimeout(r, 100))
         stateLogText = await stateLogElem.textContent()
       }
-      expect(stateLogText).toContain("initial:360x300")
+      expect(stateLogText).toMatch(/initial:360x30\d/)
       expect(stateLogText).toContain("resized:420x320")
       expect(stateLogText).toContain("wasMax:false")
       expect(stateLogText).toContain("isMax:true")

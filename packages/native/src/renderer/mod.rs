@@ -2845,7 +2845,35 @@ impl SoloRenderer {
             Ok(())
         })?;
 
-        #[cfg(ui_thread)]
+        #[cfg(all(target_os = "windows", ui_thread))]
+        return self.query_window(
+            WindowTarget::from_arg(window_id)?,
+            Some("setting the maximized window state"),
+            move |_view, window, _cx| {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                #[link(name = "user32")]
+                extern "system" {
+                    fn ShowWindow(hWnd: isize, nCmdShow: i32) -> i32;
+                }
+                const SW_RESTORE: i32 = 9;
+                const SW_MAXIMIZE: i32 = 3;
+                if let Ok(handle) = window.window_handle() {
+                    if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+                        let hwnd = handle.hwnd.get();
+                        let cmd = if maximized { SW_MAXIMIZE } else { SW_RESTORE };
+                        unsafe {
+                            ShowWindow(hwnd, cmd);
+                        }
+                        return;
+                    }
+                }
+                if window.is_maximized() != maximized {
+                    window.zoom_window();
+                }
+            },
+        );
+
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows"), ui_thread))]
         return self.query_window(
             WindowTarget::from_arg(window_id)?,
             Some("setting the maximized window state"),
@@ -2873,7 +2901,27 @@ impl SoloRenderer {
             Ok(appkit_window(window)?.isZoomed())
         })?;
 
-        #[cfg(ui_thread)]
+        #[cfg(all(target_os = "windows", ui_thread))]
+        return self.query_window(
+            WindowTarget::from_arg(window_id)?,
+            Some("reading the maximized window state"),
+            move |_view, window, _cx| {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                #[link(name = "user32")]
+                extern "system" {
+                    fn IsZoomed(hWnd: isize) -> i32;
+                }
+                if let Ok(handle) = window.window_handle() {
+                    if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+                        let hwnd = handle.hwnd.get();
+                        return unsafe { IsZoomed(hwnd) != 0 };
+                    }
+                }
+                window.is_maximized()
+            },
+        );
+
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows"), ui_thread))]
         return self.query_window(
             WindowTarget::from_arg(window_id)?,
             Some("reading the maximized window state"),
