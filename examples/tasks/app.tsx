@@ -15,8 +15,8 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js"
-import { View, Text, Button, onOpenUrls } from "@solo/solid"
-import type { StyleDesc } from "@solo/solid"
+import { createContextMenu, View, Text, Button, getScreens, onOpenUrls, openWindow } from "@solo/solid"
+import type { AppWindow, ContextMenuAnchor, StyleDesc } from "@solo/solid"
 
 interface Task {
   id: number
@@ -110,11 +110,17 @@ function TaskRow(props: {
   task: () => Task
   onToggle: () => void
   onDelete: () => void
+  onOpenMenu: (anchor: ContextMenuAnchor) => void
 }) {
   return (
     <div
       style={{ ...ROW_STYLE, hover: { backgroundColor: "#181825" } }}
       testId={`task-${props.task().id}`}
+      onMouseDown={(e) => {
+        if (e.button === 2) {
+          props.onOpenMenu(e)
+        }
+      }}
     >
       <Checkbox checked={() => props.task().completed} onToggle={props.onToggle} />
       <Text
@@ -136,6 +142,23 @@ function TaskRow(props: {
           height: 24,
           borderRadius: 5,
           cursor: "pointer",
+          marginRight: 4,
+          hover: { backgroundColor: "#45475a" },
+        }}
+        onClick={(e) => props.onOpenMenu(e)}
+        testId="task-menu-btn"
+      >
+        <Text style={{ color: "#cdd6f4", fontSize: 14 }}>⋮</Text>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 24,
+          height: 24,
+          borderRadius: 5,
+          cursor: "pointer",
           hover: { backgroundColor: "#45475a" },
         }}
         onClick={() => props.onDelete()}
@@ -147,11 +170,258 @@ function TaskRow(props: {
   )
 }
 
+function StatsWindow(props: {
+  tasks: () => Task[]
+  windowRef: () => AppWindow | undefined
+  closeRequested: () => boolean
+  onConfirmedClose: () => void
+}) {
+  const [subCount, setSubCount] = createSignal(0)
+  const [stateLog, setStateLog] = createSignal("")
+
+  return (
+    <View
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        height: "100%",
+        backgroundColor: "#1e1e2e",
+        paddingLeft: 16,
+        paddingRight: 16,
+        paddingTop: 12,
+        paddingBottom: 12,
+      }}
+      testId="secondary-window-root"
+    >
+      <Text style={{ fontSize: 18, fontWeight: "bold", color: "#cdd6f4", marginBottom: 8 }}>
+        Task Statistics
+      </Text>
+      <Text testId="secondary-total-tasks" style={{ color: "#a6adc8", fontSize: 14 }}>
+        {`Total tasks: ${props.tasks().length}`}
+      </Text>
+      <Text testId="secondary-counter" style={{ color: "#a6adc8", fontSize: 14 }}>
+        {`Counter: ${subCount()}`}
+      </Text>
+      <Text testId="secondary-state-log" style={{ color: "#a6adc8", fontSize: 12 }}>
+        {stateLog()}
+      </Text>
+
+      {/* Button to click inside the secondary window */}
+      <div
+        testId="secondary-increment-btn"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+          backgroundColor: "#89b4fa",
+          borderRadius: 4,
+          cursor: "pointer",
+        }}
+        onClick={() => setSubCount((c) => c + 1)}
+      >
+        <Text style={{ color: "#11111b", fontWeight: "bold" }}>Increment</Text>
+      </div>
+
+      {/* Button to test window state: resize, maximize, fullscreen, background */}
+      <div
+        testId="secondary-test-state-btn"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+          backgroundColor: "#b4befe",
+          borderRadius: 4,
+          cursor: "pointer",
+        }}
+        onClick={() => {
+          const win = props.windowRef()
+          if (!win) return
+          const initialSize = win.size()
+          win.resize({ width: 420, height: 320 })
+          const resizedSize = win.size()
+
+          win.setBackground("transparent")
+          win.setBackground("opaque")
+
+          const wasMax = win.isMaximized()
+          win.maximize()
+          const isMax = win.isMaximized()
+          win.restore()
+          const restored = !win.isMaximized()
+
+          const beforeFs = win.isFullscreen()
+          win.toggleFullscreen()
+          const inFs = win.isFullscreen()
+          win.toggleFullscreen()
+          const outFs = win.isFullscreen()
+
+          win.setDocumentEdited(true)
+          const isWindows =
+            (globalThis as { process?: { platform?: string } }).process?.platform === "win32"
+          const dummyPath = isWindows ? "C:\\notes.txt" : "/tmp/notes.txt"
+          win.setDocumentPath(dummyPath)
+          win.setDocumentEdited(false)
+          win.setDocumentPath(null)
+
+          win.setTabbingIdentifier("stats-group")
+          let tabOverviewThrew = false
+          try {
+            win.toggleTabOverview()
+          } catch {
+            tabOverviewThrew = true
+          }
+
+          let charPaletteThrew = false
+          try {
+            win.showCharacterPalette()
+          } catch {
+            charPaletteThrew = true
+          }
+
+          win.setTitle("Task Statistics (Active)")
+          win.focus()
+
+          setStateLog(
+            `ok;initial:${initialSize.width}x${initialSize.height};resized:${resizedSize.width}x${resizedSize.height};wasMax:${wasMax};isMax:${isMax};restored:${restored};fs:${inFs};tabThrew:${tabOverviewThrew};charThrew:${charPaletteThrew}`
+          )
+        }}
+      >
+        <Text style={{ color: "#11111b" }}>Test Window State</Text>
+      </div>
+
+      {/* Guarded close request trigger */}
+      <div
+        testId="secondary-request-close-btn"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+          backgroundColor: "#f9e2af",
+          borderRadius: 4,
+          cursor: "pointer",
+        }}
+        onClick={() => {
+          const win = props.windowRef()
+          win?.requestClose()
+        }}
+      >
+        <Text style={{ color: "#11111b" }}>Request Close</Text>
+      </div>
+
+      {/* Close confirmation button, shown when close was requested */}
+      <Show when={props.closeRequested()}>
+        <div
+          testId="secondary-confirm-close-btn"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginTop: 8,
+            paddingTop: 6,
+            paddingBottom: 6,
+            backgroundColor: "#f38ba8",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
+          onClick={() => {
+            props.onConfirmedClose()
+            props.windowRef()?.close()
+          }}
+        >
+          <Text style={{ color: "#11111b" }}>Confirm Close</Text>
+        </div>
+      </Show>
+    </View>
+  )
+}
+
 export function TasksApp() {
   // A store keeps every task object identity-stable: toggling mutates one
   // property in place so only that row's style/marker updates natively.
   const [tasks, setTasks] = createStore<Task[]>(makeTasks())
   const [draft, setDraft] = createSignal("")
+  const [menuStatus, setMenuStatus] = createSignal("idle")
+
+  const openMenu = (taskId: number, anchor: ContextMenuAnchor) => {
+    const task = tasks.find((t) => t.id === taskId)
+    if (!task) return
+    const menu = createContextMenu(
+      [
+        { id: "toggle", label: "Toggle complete", checked: task.completed },
+        { type: "separator" },
+        { id: "inspect", label: "Inspect Task", disabled: true },
+        { type: "separator" },
+        { id: "priority", label: "Set Priority" },
+        { id: "delete", label: "Delete task" },
+      ],
+      (id) => {
+        setMenuStatus(id)
+        if (id === "toggle") {
+          setTasks((state) => {
+            const row = state.find((t) => t.id === taskId)
+            if (row) row.completed = !row.completed
+          })
+        } else if (id === "delete") {
+          setTasks((state) => state.filter((t) => t.id !== taskId))
+        }
+      },
+    )
+
+    setMenuStatus("open")
+    void menu.show(anchor).then(
+      (id) => setMenuStatus(id ?? "cancelled"),
+      (err) => setMenuStatus(`error: ${String(err)}`),
+    )
+  }
+
+  let secondaryWindow: AppWindow | undefined
+  const [closeRequested, setCloseRequested] = createSignal(false)
+  const [secondaryClosed, setSecondaryClosed] = createSignal(false)
+
+  const openSecondary = () => {
+    if (secondaryWindow && !secondaryWindow.closed) {
+      secondaryWindow.focus()
+      return
+    }
+    setCloseRequested(false)
+    setSecondaryClosed(false)
+
+    const screens = getScreens()
+    const primaryScreen = screens.find((s) => s.primary) ?? screens[0]
+
+    secondaryWindow = openWindow(
+      () => (
+        <StatsWindow
+          tasks={() => tasks}
+          windowRef={() => secondaryWindow}
+          closeRequested={closeRequested}
+          onConfirmedClose={() => setSecondaryClosed(true)}
+        />
+      ),
+      {
+        title: "Task Statistics",
+        width: 360,
+        height: 300,
+        screen: primaryScreen?.id,
+        onCloseRequest: () => {
+          setCloseRequested(true)
+        },
+        onClose: () => {
+          setSecondaryClosed(true)
+        },
+      }
+    )
+  }
 
   onOpenUrls((urls) => {
     setTasks((state) => {
@@ -185,8 +455,37 @@ export function TasksApp() {
       }}
     >
       {/* Header */}
-      <View style={{ marginBottom: 8 }}>
+      <View
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        }}
+      >
         <Text style={{ fontSize: 20, fontWeight: "bold", color: "#cdd6f4" }}>Tasks</Text>
+        <Text testId="menu-status" style={{ fontSize: 12, color: "#a6adc8" }}>
+          {menuStatus()}
+        </Text>
+        <div
+          testId="open-secondary-window"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingTop: 4,
+            paddingBottom: 4,
+            borderRadius: 5,
+            backgroundColor: "#313244",
+            cursor: "pointer",
+            hover: { backgroundColor: "#45475a" },
+          }}
+          onClick={openSecondary}
+        >
+          <Text style={{ color: "#cdd6f4", fontSize: 13 }}>Stats</Text>
+        </div>
       </View>
 
       {/* Scrollable task list */}
@@ -218,6 +517,7 @@ export function TasksApp() {
                 onDelete={() =>
                   setTasks((state) => state.filter((t) => t.id !== task().id))
                 }
+                onOpenMenu={(anchor) => openMenu(task().id, anchor)}
               />
             )
           }}
