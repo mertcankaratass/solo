@@ -251,19 +251,25 @@ describe("tasks app automation", () => {
       const menuBtn = firstTask.getByTestId("task-menu-btn")
       await menuBtn.waitFor({ timeoutMs: 15_000 })
 
-      // 1. Open context menu via click
-      await menuBtn.click()
+      // 1. Open context menu via right click on task row
+      const firstTaskBounds = await firstTask.bounds()
+      const firstTaskNode = await firstTask.element()
+      await app.call("mouseDown", {
+        x: firstTaskBounds.x + firstTaskBounds.width / 2,
+        y: firstTaskBounds.y + firstTaskBounds.height / 2,
+        button: 2,
+        elementId: firstTaskNode.id,
+      })
       await waitForStatus(app, "open")
 
       // 2. Context menu items are drawn via chrome_text in GPUI overlay on Linux and Windows
       if (process.platform !== "darwin") {
         const painted = await app.call("getPaintedText", {})
-        if (painted.text.length > 0) {
-          expect(painted.text).toContain("Toggle complete")
-          expect(painted.text).toContain("Inspect Task")
-          expect(painted.text).toContain("Set Priority")
-          expect(painted.text).toContain("Delete task")
-        }
+        expect(painted.text.length).toBeGreaterThan(0)
+        expect(painted.text).toContain("Toggle complete")
+        expect(painted.text).toContain("Inspect Task")
+        expect(painted.text).toContain("Set Priority")
+        expect(painted.text).toContain("Delete task")
       }
 
       // 3. Dismiss via Escape
@@ -271,7 +277,7 @@ describe("tasks app automation", () => {
       await waitForStatus(app, "cancelled")
       expect(await getStatus(app)).toBe("cancelled")
 
-      // 4. Re-open menu, navigate with Down arrows (skipping separator and disabled item), select via Enter
+      // 4. Re-open menu via menu button, navigate with Down arrows (skipping separator and disabled item), select via Enter
       await menuBtn.click()
       await waitForStatus(app, "open")
 
@@ -290,6 +296,13 @@ describe("tasks app automation", () => {
         await waitForStatus(app, "cancelled")
         expect(await getStatus(app)).toBe("cancelled")
       }
+
+      // 6. Test menu action store effect: toggle task completed
+      await menuBtn.click()
+      await waitForStatus(app, "open")
+      await app.call("keystrokes", { keys: "down enter" })
+      await waitForStatus(app, "toggle")
+      await firstTask.getByTestId("checkbox-on").waitFor({ timeoutMs: 5_000 })
     } finally {
       await app.close()
     }

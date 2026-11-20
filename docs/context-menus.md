@@ -70,7 +70,7 @@ dismisses, as AppKit does.
 
 The GPU-backed automation tests in `context-menu-native.test.tsx` run on the
 test renderer on macOS and Linux; on Windows, live automation tests in
-`examples/tasks/automation.test.ts` verify menu opening, layout, keyboard navigation,
+`examples/tasks/automation.test.ts` verify menu opening, item labels, keyboard navigation,
 item selection, and dismissal. The GPUI layout and keyboard rules also
 have unit tests in `packages/native/src/context_menu_gpui.rs`.
 

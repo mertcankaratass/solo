@@ -1,4 +1,5 @@
 import { flush, getOwner, onCleanup } from "solid-js"
+import type { EventPayload } from "@solo/native"
 import { flushMutations, getSoloRenderer } from "./runtime.js"
 import { requireCapability } from "./capability.js"
 
@@ -8,7 +9,9 @@ export type ContextMenuItem =
 
 /** A pointer event, or an element ID to anchor below that element. Coordinates
  * are window content coordinates in logical points, as supplied by Solo events. */
-export type ContextMenuAnchor = { elementId: number; x?: number; y?: number }
+export type ContextMenuAnchor =
+  | { elementId: number; x?: number; y?: number }
+  | EventPayload
 
 export interface ContextMenu {
   /** Resolve with the selected ID, or null on dismissal, replacement or disposal. */

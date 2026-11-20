@@ -110,7 +110,7 @@ function TaskRow(props: {
   task: () => Task
   onToggle: () => void
   onDelete: () => void
-  onOpenMenu: (event: ContextMenuAnchor) => void
+  onOpenMenu: (anchor: ContextMenuAnchor) => void
 }) {
   return (
     <div
@@ -118,7 +118,7 @@ function TaskRow(props: {
       testId={`task-${props.task().id}`}
       onMouseDown={(e) => {
         if (e.button === 2) {
-          props.onOpenMenu(e as unknown as ContextMenuAnchor)
+          props.onOpenMenu(e)
         }
       }}
     >
@@ -145,7 +145,7 @@ function TaskRow(props: {
           marginRight: 4,
           hover: { backgroundColor: "#45475a" },
         }}
-        onClick={(e) => props.onOpenMenu(e as unknown as ContextMenuAnchor)}
+        onClick={(e) => props.onOpenMenu(e)}
         testId="task-menu-btn"
       >
         <Text style={{ color: "#cdd6f4", fontSize: 14 }}>⋮</Text>
@@ -177,21 +177,31 @@ export function TasksApp() {
   const [draft, setDraft] = createSignal("")
   const [menuStatus, setMenuStatus] = createSignal("idle")
 
-  const menu = createContextMenu(
-    [
-      { id: "toggle", label: "Toggle complete", checked: true },
-      { type: "separator" },
-      { id: "inspect", label: "Inspect Task", disabled: true },
-      { type: "separator" },
-      { id: "priority", label: "Set Priority" },
-      { id: "delete", label: "Delete task" },
-    ],
-    (id) => {
-      setMenuStatus(id)
-    },
-  )
+  const openMenu = (taskId: number, anchor: ContextMenuAnchor) => {
+    const task = tasks.find((t) => t.id === taskId)
+    if (!task) return
+    const menu = createContextMenu(
+      [
+        { id: "toggle", label: "Toggle complete", checked: task.completed },
+        { type: "separator" },
+        { id: "inspect", label: "Inspect Task", disabled: true },
+        { type: "separator" },
+        { id: "priority", label: "Set Priority" },
+        { id: "delete", label: "Delete task" },
+      ],
+      (id) => {
+        setMenuStatus(id)
+        if (id === "toggle") {
+          setTasks((state) => {
+            const row = state.find((t) => t.id === taskId)
+            if (row) row.completed = !row.completed
+          })
+        } else if (id === "delete") {
+          setTasks((state) => state.filter((t) => t.id !== taskId))
+        }
+      },
+    )
 
-  const openMenu = (anchor: ContextMenuAnchor) => {
     setMenuStatus("open")
     void menu.show(anchor).then(
       (id) => setMenuStatus(id ?? "cancelled"),
@@ -267,7 +277,7 @@ export function TasksApp() {
                 onDelete={() =>
                   setTasks((state) => state.filter((t) => t.id !== task().id))
                 }
-                onOpenMenu={(anchor) => openMenu(anchor)}
+                onOpenMenu={(anchor) => openMenu(task().id, anchor)}
               />
             )
           }}
