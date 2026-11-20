@@ -420,7 +420,7 @@ as it does on macOS, with these differences:
 
 ## Limits
 
-- Secondary window opening, cross-window state, resizing, maximize, fullscreen, and guarded close requests are tested on macOS, Linux and Windows.
+- Secondary window opening, cross-window state, resizing, maximize, fullscreen, and guarded close requests are tested on macOS, Windows, and Linux (headless Xvfb CI verifies resizing and close; window managers handle maximize and fullscreen).
 - New windows open centered on their screen; there is no option for an
   exact position yet.
 - File dialogs, the debug overlay, screenshots and clock control in the

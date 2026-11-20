@@ -297,9 +297,15 @@ describe("tasks app automation", () => {
       expect(stateLogText).toMatch(/initial:360x30\d/)
       expect(stateLogText).toContain("resized:420x320")
       expect(stateLogText).toContain("wasMax:false")
-      expect(stateLogText).toContain("isMax:true")
+      if (process.platform === "linux") {
+        // Headless X11 (xvfb without a window manager) does not process EWMH maximize/fullscreen messages
+        expect(stateLogText).toContain("isMax:false")
+        expect(stateLogText).toContain("fs:false")
+      } else {
+        expect(stateLogText).toContain("isMax:true")
+        expect(stateLogText).toContain("fs:true")
+      }
       expect(stateLogText).toContain("restored:true")
-      expect(stateLogText).toContain("fs:true")
 
       // 8. Test guarded close request: requestClose leaves window open
       const requestCloseBtn = app.getByTestId("secondary-request-close-btn")
