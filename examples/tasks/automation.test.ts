@@ -16,6 +16,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { inflateSync } from "node:zlib"
 import { describe, expect, it } from "vitest"
 import { launch } from "@solo/solid/automation"
 import type { App } from "@solo/solid/automation"
@@ -161,12 +162,6 @@ describe("tasks app automation", () => {
       await firstTask.getByTestId("checkbox-off").click()
       await firstTask.getByTestId("checkbox-on").waitFor({ timeoutMs: 5_000 })
 
-      if (process.platform === "win32") {
-        // captureScreenshot is implemented only on macOS and Linux/X11.
-        console.warn("[automation] Windows: skipped the screenshot")
-        return
-      }
-
       // CI keeps screenshots for failed runs by pointing this at an artifact
       // directory; a local run uses and removes a temp directory.
       const retained = process.env.SOLO_SCREENSHOT_DIR
@@ -176,10 +171,20 @@ describe("tasks app automation", () => {
         const path = await app.screenshot({
           path: join(dir, `window-${process.pid}.png`),
         })
+        const bytes = readFileSync(path)
         // A PNG starts with this 8-byte signature.
-        expect(readFileSync(path).subarray(0, 8)).toEqual(
+        expect(bytes.subarray(0, 8)).toEqual(
           Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
         )
+        const png = parsePng(bytes)
+        expect(png.width).toBeGreaterThan(0)
+        expect(png.height).toBeGreaterThan(0)
+        // Ensure the screenshot is not a uniform or uninitialized all-black frame
+        const uniqueBytes = new Set(png.pixels)
+        expect(uniqueBytes.size).toBeGreaterThan(1)
+        // Verify pixels match known app colors (#1e1e2e -> 0x1e, 0x2e)
+        expect(uniqueBytes.has(0x1e)).toBe(true)
+        expect(uniqueBytes.has(0x2e)).toBe(true)
       } finally {
         if (!retained) rmSync(dir, { recursive: true, force: true })
       }
@@ -187,6 +192,26 @@ describe("tasks app automation", () => {
       await app.close()
     }
   }, 30_000)
+
+  function parsePng(buffer: Buffer): { width: number; height: number; pixels: Buffer } {
+    let offset = 8
+    const idatParts: Buffer[] = []
+    let width = 0
+    let height = 0
+    while (offset < buffer.length) {
+      const length = buffer.readUInt32BE(offset)
+      const type = buffer.subarray(offset + 4, offset + 8).toString("ascii")
+      if (type === "IHDR") {
+        width = buffer.readUInt32BE(offset + 8)
+        height = buffer.readUInt32BE(offset + 12)
+      } else if (type === "IDAT") {
+        idatParts.push(buffer.subarray(offset + 8, offset + 8 + length))
+      }
+      offset += 12 + length
+    }
+    const decompressed = inflateSync(Buffer.concat(idatParts))
+    return { width, height, pixels: decompressed }
+  }
 
   it("types into the composer with fill() and press()", async () => {
     const app = await launchTasksApp()
@@ -324,6 +349,96 @@ describe("tasks app automation", () => {
     const current = await app.getByTestId("menu-status").textContent()
     expect(current).toBe(expected)
   }
+
+  it("opens a secondary window, clicks into it, toggles window state, and handles guarded close", async () => {
+    const app = await launchTasksApp()
+    try {
+      // 1. Initial tree only has main window
+      const initialTree = await app.call("getTree", {})
+      expect(initialTree.windows ?? []).toHaveLength(0)
+
+      // 2. Click the open-secondary-window button in the main window
+      const openBtn = app.getByTestId("open-secondary-window")
+      await openBtn.waitFor({ timeoutMs: 15_000 })
+      await openBtn.click()
+
+      // 3. Wait for the secondary window to appear in the tree
+      const secondaryRoot = app.getByTestId("secondary-window-root")
+      await secondaryRoot.waitFor({ timeoutMs: 10_000 })
+
+      // 4. Verify getTree() now includes the secondary window
+      const treeWithSecondary = await app.call("getTree", {})
+      expect(treeWithSecondary.windows ?? []).toHaveLength(1)
+
+      // 5. Verify the secondary window sees the shared state (total tasks)
+      const tasksElem = app.getByTestId("secondary-total-tasks")
+      await tasksElem.waitFor({ timeoutMs: 10_000 })
+      expect(await tasksElem.textContent()).toContain("Total tasks: 25")
+
+      // 6. Click an element inside the secondary window (verifies automation routing across windows)
+      const counterElem = app.getByTestId("secondary-counter")
+      await counterElem.waitFor({ timeoutMs: 10_000 })
+      expect(await counterElem.textContent()).toContain("Counter: 0")
+
+      const incBtn = app.getByTestId("secondary-increment-btn")
+      await incBtn.click()
+
+      let counterText = await counterElem.textContent()
+      for (let i = 0; i < 20 && !counterText.includes("Counter: 1"); i++) {
+        await new Promise((r) => setTimeout(r, 100))
+        counterText = await counterElem.textContent()
+      }
+      expect(counterText).toContain("Counter: 1")
+
+      // 7. Test window state manipulation from the secondary window
+      const testStateBtn = app.getByTestId("secondary-test-state-btn")
+      await testStateBtn.click()
+
+      const stateLogElem = app.getByTestId("secondary-state-log")
+      let stateLogText = await stateLogElem.textContent()
+      for (let i = 0; i < 20 && !stateLogText.includes("resized:420x320"); i++) {
+        await new Promise((r) => setTimeout(r, 100))
+        stateLogText = await stateLogElem.textContent()
+      }
+      expect(stateLogText).toMatch(/initial:360x30\d/)
+      expect(stateLogText).toContain("resized:420x320")
+      expect(stateLogText).toContain("wasMax:false")
+      if (process.platform === "linux") {
+        // Headless X11 (xvfb without a window manager) does not process EWMH maximize/fullscreen messages
+        expect(stateLogText).toContain("isMax:false")
+        expect(stateLogText).toContain("fs:false")
+      } else {
+        expect(stateLogText).toContain("isMax:true")
+        expect(stateLogText).toContain("fs:true")
+      }
+      expect(stateLogText).toContain("restored:true")
+
+      // 8. Test guarded close request: requestClose leaves window open
+      const requestCloseBtn = app.getByTestId("secondary-request-close-btn")
+      await requestCloseBtn.click()
+
+      // The guarded close request fired, revealing the confirm close button
+      const confirmCloseBtn = app.getByTestId("secondary-confirm-close-btn")
+      await confirmCloseBtn.waitFor({ timeoutMs: 5_000 })
+
+      // Window is still open!
+      const treeStillOpen = await app.call("getTree", {})
+      expect(treeStillOpen.windows ?? []).toHaveLength(1)
+
+      // 9. Confirm and close the window
+      await confirmCloseBtn.click()
+
+      // 10. Wait for the secondary window to disappear from getTree
+      let finalTree = await app.call("getTree", {})
+      for (let i = 0; i < 20 && (finalTree.windows ?? []).length > 0; i++) {
+        await new Promise((r) => setTimeout(r, 100))
+        finalTree = await app.call("getTree", {})
+      }
+      expect(finalTree.windows ?? []).toHaveLength(0)
+    } finally {
+      await app.close()
+    }
+  }, 45_000)
 
   /** Poll `getAllText` until some entry contains `needle`. */
   async function waitForText(app: App, needle: string): Promise<string[]> {

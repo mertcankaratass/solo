@@ -256,7 +256,7 @@ cd packages/native && cargo test --features test-support --lib --test layout_pro
 |---|---|
 | macOS | Primary. Windows, input, desktop APIs, `<webview>`, live automation and the GPU test renderer. |
 | Linux (Wayland, X11) | Windows and physical input, multiple windows (Solo-drawn tabs, document markers, close requests, window state, screens), client-side decorations, in-window context menus and alerts, status-item menu-bar apps, portal file dialogs, desktop actions and clipboard, freedesktop Trash and recent documents, system appearance, deep links and single-instance launches, Secret Service credential storage, system notifications, `solo dev`, compiled production builds, live automation and the GPU test renderer. Platform limits are listed under [Current boundaries](#current-boundaries). |
-| Windows | Partial. A window with input and live automation, Action Center notifications, Credential Manager storage, notification-area (tray) menu-bar apps, in-window context menus, `<webview>` (WebView2), app directories, desktop actions, clipboard and `solo dev`. Multiple windows and window state are compiled in but untested. Missing APIs are listed under [Current boundaries](#current-boundaries). |
+| Windows | Partial. A window with input and live automation, multiple windows (Solo-drawn tabs, document markers, close requests, window state, screens), Action Center notifications, Credential Manager storage, notification-area (tray) menu-bar apps, in-window context menus, `<webview>` (WebView2), app directories, desktop actions, clipboard and `solo dev`. Missing APIs are listed under [Current boundaries](#current-boundaries). |
 
 Every platform builds in CI. The macOS and Linux test suites run in CI, and
 Windows runs the `examples/tasks` automation suite against a live app. The
@@ -274,12 +274,10 @@ other Windows features above are not covered by a test.
 - Linux platform limits: live automation screenshots need X11;
   `createThermalState` throws (GPUI has no Linux thermal feed).
 - Windows has no deep links, Dock calls, thermal state, hide/show
-  applications, automation screenshots or GPU test renderer.
+  applications or GPU test renderer.
   Those APIs throw or reject, and `onOpenUrls` never fires.
-  Multiple windows (`openWindow`), window state, close requests, tabs,
-  document windows, screens, `beep`, application commands,
-  file dialogs, alerts, system appearance and file drop are compiled in but
-  have not been exercised on Windows.
+  `beep`, application commands, file dialogs, alerts, system appearance and
+  file drop are compiled in but have not been exercised on Windows.
 - `<webview>` is WKWebView on macOS, a WebKitGTK child window on Linux/X11
   and WebView2 on Windows. Embedding another toolkit's surface is impossible
   on Wayland, so Linux on Wayland shows a clear error instead. Windows

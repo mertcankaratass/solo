@@ -2655,7 +2655,7 @@ impl SoloRenderer {
         #[cfg(not(any(target_os = "macos", ui_thread)))]
         {
             let _ = (root, options);
-            Err(Error::from_reason("Multiple windows are supported only on macOS and Linux"))
+            Err(Error::from_reason("Multiple windows are supported only on macOS, Linux and Windows"))
         }
     }
 
@@ -2701,7 +2701,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Background window lifecycle is supported only on macOS and Linux",
+                "Background window lifecycle is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2737,7 +2737,7 @@ impl SoloRenderer {
         {
             let _ = target;
             Err(Error::from_reason(
-                "Background window lifecycle is supported only on macOS and Linux",
+                "Background window lifecycle is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2757,7 +2757,7 @@ impl SoloRenderer {
         {
             let _ = (guarded, target);
             Err(Error::from_reason(
-                "Close requests are supported only on macOS and Linux",
+                "Close requests are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2807,7 +2807,7 @@ impl SoloRenderer {
         {
             let _ = target;
             Err(Error::from_reason(
-                "Close requests are supported only on macOS and Linux",
+                "Close requests are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2845,7 +2845,35 @@ impl SoloRenderer {
             Ok(())
         })?;
 
-        #[cfg(ui_thread)]
+        #[cfg(all(target_os = "windows", ui_thread))]
+        return self.query_window(
+            WindowTarget::from_arg(window_id)?,
+            Some("setting the maximized window state"),
+            move |_view, window, _cx| {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                #[link(name = "user32")]
+                extern "system" {
+                    fn ShowWindow(hWnd: isize, nCmdShow: i32) -> i32;
+                }
+                const SW_RESTORE: i32 = 9;
+                const SW_MAXIMIZE: i32 = 3;
+                if let Ok(handle) = window.window_handle() {
+                    if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+                        let hwnd = handle.hwnd.get();
+                        let cmd = if maximized { SW_MAXIMIZE } else { SW_RESTORE };
+                        unsafe {
+                            ShowWindow(hwnd, cmd);
+                        }
+                        return;
+                    }
+                }
+                if window.is_maximized() != maximized {
+                    window.zoom_window();
+                }
+            },
+        );
+
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows"), ui_thread))]
         return self.query_window(
             WindowTarget::from_arg(window_id)?,
             Some("setting the maximized window state"),
@@ -2860,7 +2888,7 @@ impl SoloRenderer {
         {
             let _ = (maximized, window_id);
             Err(Error::from_reason(
-                "Maximized window state is supported only on macOS and Linux",
+                "Maximized window state is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2873,7 +2901,27 @@ impl SoloRenderer {
             Ok(appkit_window(window)?.isZoomed())
         })?;
 
-        #[cfg(ui_thread)]
+        #[cfg(all(target_os = "windows", ui_thread))]
+        return self.query_window(
+            WindowTarget::from_arg(window_id)?,
+            Some("reading the maximized window state"),
+            move |_view, window, _cx| {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                #[link(name = "user32")]
+                extern "system" {
+                    fn IsZoomed(hWnd: isize) -> i32;
+                }
+                if let Ok(handle) = window.window_handle() {
+                    if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+                        let hwnd = handle.hwnd.get();
+                        return unsafe { IsZoomed(hwnd) != 0 };
+                    }
+                }
+                window.is_maximized()
+            },
+        );
+
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows"), ui_thread))]
         return self.query_window(
             WindowTarget::from_arg(window_id)?,
             Some("reading the maximized window state"),
@@ -2884,7 +2932,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Maximized window state is supported only on macOS and Linux",
+                "Maximized window state is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2903,7 +2951,7 @@ impl SoloRenderer {
 
         #[cfg(not(any(target_os = "macos", ui_thread)))]
         Err(Error::from_reason(
-            "Explicit application quit is supported only on macOS and Linux",
+            "Explicit application quit is supported only on macOS, Linux and Windows",
         ))
     }
 
@@ -2927,7 +2975,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Reading the window size is supported only on macOS and Linux",
+                "Reading the window size is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2957,7 +3005,7 @@ impl SoloRenderer {
         {
             let _ = (fullscreen, window_id);
             Err(Error::from_reason(
-                "Fullscreen windows are supported only on macOS and Linux",
+                "Fullscreen windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2981,7 +3029,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Fullscreen windows are supported only on macOS and Linux",
+                "Fullscreen windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3006,7 +3054,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Minimizing windows is supported only on macOS and Linux",
+                "Minimizing windows is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3037,7 +3085,7 @@ impl SoloRenderer {
         {
             let _ = (background, window_id);
             Err(Error::from_reason(
-                "Changing the window background is supported only on macOS and Linux",
+                "Changing the window background is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3065,7 +3113,7 @@ impl SoloRenderer {
         {
             let _ = (width, height, window_id);
             Err(Error::from_reason(
-                "Resizing windows is supported only on macOS and Linux",
+                "Resizing windows is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3105,7 +3153,7 @@ impl SoloRenderer {
         {
             let _ = (identifier, target);
             Err(Error::from_reason(
-                "Window tabs are supported only on macOS and Linux",
+                "Window tabs are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3131,7 +3179,7 @@ impl SoloRenderer {
         {
             let _ = target;
             Err(Error::from_reason(
-                "Window tabs are supported only on macOS and Linux",
+                "Window tabs are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3150,7 +3198,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "The tab overview is macOS-only; on Linux the tabs are the window's tab strip",
+                "The tab overview is macOS-only; on Linux and Windows the tabs are the window's tab strip",
             ))
         }
     }
@@ -3199,7 +3247,7 @@ impl SoloRenderer {
         {
             let _ = (edited, window_id);
             Err(Error::from_reason(
-                "Document windows are supported only on macOS and Linux",
+                "Document windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3230,7 +3278,7 @@ impl SoloRenderer {
         {
             let _ = (path, window_id);
             Err(Error::from_reason(
-                "Document windows are supported only on macOS and Linux",
+                "Document windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3255,7 +3303,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Document windows are supported only on macOS and Linux",
+                "Document windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3280,7 +3328,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Document windows are supported only on macOS and Linux",
+                "Document windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3974,10 +4022,11 @@ impl SoloRenderer {
             Ok(())
         }
 
-        // The capture reads back what the X server shows, so it waits for the
-        // latest tree to be presented. Next-frame callbacks run before that
-        // frame draws and presents: frame N shows the tree, frame N+1 reads.
-        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+        // The capture reads back what the OS compositor or window server shows,
+        // so it waits for the latest tree to be presented. Next-frame callbacks
+        // run before that frame draws and presents: frame N shows the tree,
+        // frame N+1 reads.
+        #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
         {
             let (response, receiver) = sync_channel(1);
             self.send_ui_command(UiCommand::Window(
@@ -3987,7 +4036,11 @@ impl SoloRenderer {
                     window.refresh();
                     window.on_next_frame(move |window, _cx| {
                         window.on_next_frame(move |window, _cx| {
-                            response.send(capture_x11_window(window, &path)).ok();
+                            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+                            let res = capture_x11_window(window, &path);
+                            #[cfg(target_os = "windows")]
+                            let res = capture_windows_window(window, &path);
+                            response.send(res).ok();
                         });
                     });
                 }),
@@ -4006,7 +4059,8 @@ impl SoloRenderer {
         #[cfg(not(any(
             all(target_os = "macos", feature = "test-support"),
             target_os = "linux",
-            target_os = "freebsd"
+            target_os = "freebsd",
+            target_os = "windows"
         )))]
         {
             let _ = path;
@@ -4071,6 +4125,203 @@ fn capture_x11_window(window: &gpui::Window, path: &str) -> std::result::Result<
         .ok_or_else(|| "X11 screenshot failed: image size mismatch".to_string())?
         .save(path)
         .map_err(|e| format!("Failed to save screenshot: {e}"))
+}
+
+/// Save the window's pixels as a PNG, read back from the Win32 window via GDI/DWM.
+#[cfg(all(target_os = "windows", feature = "automation"))]
+fn capture_windows_window(window: &gpui::Window, path: &str) -> std::result::Result<(), String> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    type HWND = isize;
+    type HDC = isize;
+    type HBITMAP = isize;
+    type HGDIOBJ = isize;
+    type BOOL = i32;
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct RECT {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+
+    #[repr(C)]
+    struct BITMAPINFOHEADER {
+        biSize: u32,
+        biWidth: i32,
+        biHeight: i32,
+        biPlanes: u16,
+        biBitCount: u16,
+        biCompression: u32,
+        biSizeImage: u32,
+        biXPelsPerMeter: i32,
+        biYPelsPerMeter: i32,
+        biClrUsed: u32,
+        biClrImportant: u32,
+    }
+
+    #[repr(C)]
+    struct RGBQUAD {
+        rgbBlue: u8,
+        rgbGreen: u8,
+        rgbRed: u8,
+        rgbReserved: u8,
+    }
+
+    #[repr(C)]
+    struct BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER,
+        bmiColors: [RGBQUAD; 1],
+    }
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetClientRect(hWnd: HWND, lpRect: *mut RECT) -> BOOL;
+        fn GetDC(hWnd: HWND) -> HDC;
+        fn ReleaseDC(hWnd: HWND, hDC: HDC) -> i32;
+        fn PrintWindow(hWnd: HWND, hdcBlt: HDC, nFlags: u32) -> BOOL;
+    }
+
+    #[link(name = "gdi32")]
+    extern "system" {
+        fn CreateCompatibleDC(hdc: HDC) -> HDC;
+        fn CreateCompatibleBitmap(hdc: HDC, cx: i32, cy: i32) -> HBITMAP;
+        fn SelectObject(hdc: HDC, h: HGDIOBJ) -> HGDIOBJ;
+        fn DeleteObject(ho: HGDIOBJ) -> BOOL;
+        fn DeleteDC(hdc: HDC) -> BOOL;
+        fn BitBlt(
+            hdcDest: HDC,
+            nXDest: i32,
+            nYDest: i32,
+            nWidth: i32,
+            nHeight: i32,
+            hdcSrc: HDC,
+            nXSrc: i32,
+            nYSrc: i32,
+            dwRop: u32,
+        ) -> BOOL;
+        fn GetDIBits(
+            hdc: HDC,
+            hbm: HBITMAP,
+            start: u32,
+            cLines: u32,
+            lpvBits: *mut std::ffi::c_void,
+            lpbmi: *mut BITMAPINFO,
+            usage: u32,
+        ) -> i32;
+    }
+
+    const SRCCOPY: u32 = 0x00CC0020;
+    const DIB_RGB_COLORS: u32 = 0;
+    const BI_RGB: u32 = 0;
+    const PW_CLIENTONLY: u32 = 1;
+    const PW_RENDERFULLCONTENT: u32 = 2;
+
+    let handle = HasWindowHandle::window_handle(window).map_err(|e| e.to_string())?;
+    let hwnd: HWND = match handle.as_raw() {
+        RawWindowHandle::Win32(win32) => win32.hwnd.get(),
+        _ => return Err("captureScreenshot on Windows needs a Win32 window".into()),
+    };
+
+    let mut rect = RECT::default();
+    if unsafe { GetClientRect(hwnd, &mut rect) } == 0 {
+        return Err("Windows screenshot failed: GetClientRect failed".into());
+    }
+    let width = rect.right - rect.left;
+    let height = rect.bottom - rect.top;
+    if width <= 0 || height <= 0 {
+        return Err(format!("Windows screenshot failed: invalid dimensions {width}x{height}"));
+    }
+
+    unsafe {
+        let hdc_window = GetDC(hwnd);
+        if hdc_window == 0 {
+            return Err("Windows screenshot failed: GetDC failed".into());
+        }
+        let hdc_mem = CreateCompatibleDC(hdc_window);
+        if hdc_mem == 0 {
+            ReleaseDC(hwnd, hdc_window);
+            return Err("Windows screenshot failed: CreateCompatibleDC failed".into());
+        }
+        let hbm = CreateCompatibleBitmap(hdc_window, width, height);
+        if hbm == 0 {
+            DeleteDC(hdc_mem);
+            ReleaseDC(hwnd, hdc_window);
+            return Err("Windows screenshot failed: CreateCompatibleBitmap failed".into());
+        }
+        let old_hbm = SelectObject(hdc_mem, hbm);
+
+        let mut captured = PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY | PW_RENDERFULLCONTENT) != 0;
+        if !captured {
+            captured = PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY) != 0;
+        }
+        if !captured {
+            captured = BitBlt(hdc_mem, 0, 0, width, height, hdc_window, 0, 0, SRCCOPY) != 0;
+        }
+
+        if !captured {
+            SelectObject(hdc_mem, old_hbm);
+            DeleteObject(hbm);
+            DeleteDC(hdc_mem);
+            ReleaseDC(hwnd, hdc_window);
+            return Err("Windows screenshot failed: PrintWindow and BitBlt failed".into());
+        }
+
+        SelectObject(hdc_mem, old_hbm);
+
+        let mut bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width,
+                biHeight: -height,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB,
+                biSizeImage: 0,
+                biXPelsPerMeter: 0,
+                biYPelsPerMeter: 0,
+                biClrUsed: 0,
+                biClrImportant: 0,
+            },
+            bmiColors: [RGBQUAD {
+                rgbBlue: 0,
+                rgbGreen: 0,
+                rgbRed: 0,
+                rgbReserved: 0,
+            }],
+        };
+
+        let byte_len = (width as usize) * (height as usize) * 4;
+        let mut bgra = vec![0u8; byte_len];
+        let scanlines = GetDIBits(
+            hdc_mem,
+            hbm,
+            0,
+            height as u32,
+            bgra.as_mut_ptr() as *mut std::ffi::c_void,
+            &mut bmi,
+            DIB_RGB_COLORS,
+        );
+
+        DeleteObject(hbm);
+        DeleteDC(hdc_mem);
+        ReleaseDC(hwnd, hdc_window);
+
+        if scanlines == 0 {
+            return Err("Windows screenshot failed: GetDIBits returned no scanlines".into());
+        }
+
+        let rgba: Vec<u8> = bgra
+            .chunks_exact(4)
+            .flat_map(|px| [px[2], px[1], px[0], 255])
+            .collect();
+        image::RgbaImage::from_raw(width as u32, height as u32, rgba)
+            .ok_or_else(|| "Windows screenshot failed: image size mismatch".to_string())?
+            .save(path)
+            .map_err(|e| format!("Failed to save screenshot: {e}"))
+    }
 }
 
 #[cfg(ui_thread)]
@@ -4399,7 +4650,7 @@ pub(crate) fn validate_window_options(options: &WindowOptions) -> Result<()> {
     }
     if cfg!(not(any(target_os = "macos", ui_thread))) && options.screen.is_some() {
         return Err(Error::from_reason(
-            "The screen window option is supported only on macOS and Linux",
+            "The screen window option is supported only on macOS, Linux and Windows",
         ));
     }
     Ok(())

@@ -396,16 +396,16 @@ decorations anyway, the app gets Solo's titlebar unless it passes
 
 ## Platforms
 
-On Linux every window is a real top-level window, and the surface above works
+On Linux and Windows every window is a real top-level window, and the surface above works
 as it does on macOS, with these differences:
 
-- The window manager owns the close button, or Solo draws one when the
+- The window manager (or Windows) owns the close button, or Solo draws one when the
   window is client-decorated (see [Decorations](#decorations)). Either way a
   close request reaches the window as `on_should_close`, so with
   `onCloseRequest` the window stays open and the handler runs, exactly as on
   macOS.
 - Closing the last window ends the process unless the app passes `menuBar`,
-  which keeps it alive behind a status item
+  which keeps it alive behind a status item / tray icon
   ([menu-bar-apps.md](menu-bar-apps.md)). `showWindow()` still calls
   `activate` on an open window, and reopens the main window while another
   window keeps the app running.
@@ -415,13 +415,12 @@ as it does on macOS, with these differences:
   [Document windows](#document-windows)), and `setDocumentPath` validates and
   stores the path without drawing anything.
 - Window tabs are drawn by Solo (see [Window tabs](#window-tabs)); a `menuBar`
-  app shows a status item instead of a menu bar
+  app shows a status item / tray icon instead of a menu bar
   ([menu-bar-apps.md](menu-bar-apps.md)).
 
 ## Limits
 
-- Everything on this page is tested on macOS and Linux. On Windows it is
-  compiled in through the same path as Linux, but has not been exercised.
+- Secondary window opening, cross-window state, resizing, maximize, fullscreen, and guarded close requests are tested on macOS, Windows, and Linux (headless Xvfb CI verifies resizing and close; window managers handle maximize and fullscreen).
 - New windows open centered on their screen; there is no option for an
   exact position yet.
 - File dialogs, the debug overlay, screenshots and clock control in the
