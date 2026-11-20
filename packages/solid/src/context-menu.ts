@@ -22,7 +22,7 @@ export interface ContextMenu {
 let nextRequestId = 0
 
 /** Create a native menu: an `NSMenu` on macOS, a GPUI-drawn overlay in the
- * app window on Linux. onSelect is never called after disposal. Outside a
+ * app window on Linux and Windows. onSelect is never called after disposal. Outside a
  * Solid owner, call dispose() when the controller is no longer used. */
 export function createContextMenu(
   items: readonly ContextMenuItem[],

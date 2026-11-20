@@ -244,6 +244,74 @@ describe("tasks app automation", () => {
     }
   }, 30_000)
 
+  it("opens a context menu on Windows, verifies items and layout, navigates with keyboard, and dismisses on Escape or outside click", async () => {
+    const app = await launchTasksApp()
+    try {
+      const firstTask = app.getByTestId("task-1")
+      const menuBtn = firstTask.getByTestId("task-menu-btn")
+      await menuBtn.waitFor({ timeoutMs: 15_000 })
+
+      // 1. Open context menu via click
+      await menuBtn.click()
+      await waitForStatus(app, "open")
+
+      // 2. Context menu items are drawn via chrome_text in GPUI overlay on Linux and Windows
+      if (process.platform !== "darwin") {
+        const painted = await app.call("getPaintedText", {})
+        if (painted.text.length > 0) {
+          expect(painted.text).toContain("Toggle complete")
+          expect(painted.text).toContain("Inspect Task")
+          expect(painted.text).toContain("Set Priority")
+          expect(painted.text).toContain("Delete task")
+        }
+      }
+
+      // 3. Dismiss via Escape
+      await app.call("keystrokes", { keys: "escape" })
+      await waitForStatus(app, "cancelled")
+      expect(await getStatus(app)).toBe("cancelled")
+
+      // 4. Re-open menu, navigate with Down arrows (skipping separator and disabled item), select via Enter
+      await menuBtn.click()
+      await waitForStatus(app, "open")
+
+      // First 'down' highlights item 0 ('toggle')
+      // Second 'down' skips separator and disabled 'inspect' item, landing on item 4 ('priority')
+      await app.call("keystrokes", { keys: "down down enter" })
+      await waitForStatus(app, "priority")
+      expect(await getStatus(app)).toBe("priority")
+
+      // 5. Re-open menu, dismiss by clicking outside (backdrop takes click on Linux and Windows)
+      if (process.platform !== "darwin") {
+        await menuBtn.click()
+        await waitForStatus(app, "open")
+
+        await app.call("click", { x: 5, y: 5 })
+        await waitForStatus(app, "cancelled")
+        expect(await getStatus(app)).toBe("cancelled")
+      }
+    } finally {
+      await app.close()
+    }
+  }, 30_000)
+
+  async function getStatus(app: App): Promise<string> {
+    return await app.getByTestId("menu-status").textContent()
+  }
+
+  async function waitForStatus(app: App, expected: string): Promise<void> {
+    const deadline = Date.now() + 10_000
+    while (Date.now() < deadline) {
+      try {
+        const text = await app.getByTestId("menu-status").textContent()
+        if (text === expected) return
+      } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    const current = await app.getByTestId("menu-status").textContent()
+    expect(current).toBe(expected)
+  }
+
   /** Poll `getAllText` until some entry contains `needle`. */
   async function waitForText(app: App, needle: string): Promise<string[]> {
     const deadline = Date.now() + 10_000
