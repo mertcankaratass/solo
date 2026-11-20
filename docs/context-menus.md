@@ -2,8 +2,8 @@
 
 `createContextMenu` from `@solo/solid` presents a menu with keyboard
 navigation, disabled and checked items, and dismissal. macOS shows an
-`NSMenu`; Linux draws the menu inside the app window (see
-[Linux](#linux)).
+`NSMenu`; Linux and Windows draw the menu inside the app window (see
+[Linux and Windows](#linux-and-windows)).
 
 ```tsx
 import { createContextMenu, View, Text } from "@solo/solid"
@@ -26,7 +26,7 @@ function Article() {
 Pass a Solo pointer event to position at its window-content coordinates, in
 logical points. Pass `{ elementId }` to position below an already-painted
 element instead. The platform keeps the menu inside the screen (macOS) or the
-window (Linux). A missing or destroyed element produces an error.
+window (Linux and Windows). A missing or destroyed element produces an error.
 
 `show()` returns `Promise<string | null>`: the selected action ID, or `null`
 for Escape, outside dismissal, replacement, `dismiss()`, or disposal. Errors
@@ -44,9 +44,9 @@ previous session. Unsupported platforms report a missing renderer capability.
 Menus support up to 256 entries; IDs are limited to 1024 UTF-8 bytes and labels
 to 4096 UTF-8 bytes. IDs must be unique and labels non-empty.
 
-## Linux
+## Linux and Windows
 
-Linux has no native menu: a menu is an overlay in the app's own window. Solo
+Linux and Windows have no native menu: a menu is an overlay in the app's own window. Solo
 draws it with GPUI, so the frame loop keeps running and no helper process is
 started. Labels, separators, disabled and checked items match the macOS
 versions.
@@ -69,7 +69,9 @@ dismisses, as AppKit does.
 - Release builds need no extra file: everything is inside the addon.
 
 The GPU-backed automation tests in `context-menu-native.test.tsx` run on the
-test renderer on macOS and Linux; the Linux layout and keyboard rules also
+test renderer on macOS and Linux; on Windows, live automation tests in
+`examples/tasks/automation.test.ts` verify menu opening, item labels, keyboard navigation,
+item selection, and dismissal. The GPUI layout and keyboard rules also
 have unit tests in `packages/native/src/context_menu_gpui.rs`.
 
 ## Event loops and packaging

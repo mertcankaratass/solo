@@ -4944,7 +4944,7 @@ impl SoloRenderer {
     #[napi]
     pub fn show_context_menu(&self, _json: String) -> Result<()> {
         Err(Error::from_reason(
-            "Context menus are supported only on macOS and Linux",
+            "Context menus are supported only on macOS, Linux and Windows",
         ))
     }
 

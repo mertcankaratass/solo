@@ -15,8 +15,8 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js"
-import { View, Text, Button, getScreens, openWindow } from "@solo/solid"
-import type { AppWindow, StyleDesc } from "@solo/solid"
+import { createContextMenu, View, Text, Button, getScreens, openWindow } from "@solo/solid"
+import type { AppWindow, ContextMenuAnchor, StyleDesc } from "@solo/solid"
 
 interface Task {
   id: number
@@ -110,11 +110,17 @@ function TaskRow(props: {
   task: () => Task
   onToggle: () => void
   onDelete: () => void
+  onOpenMenu: (anchor: ContextMenuAnchor) => void
 }) {
   return (
     <div
       style={{ ...ROW_STYLE, hover: { backgroundColor: "#181825" } }}
       testId={`task-${props.task().id}`}
+      onMouseDown={(e) => {
+        if (e.button === 2) {
+          props.onOpenMenu(e)
+        }
+      }}
     >
       <Checkbox checked={() => props.task().completed} onToggle={props.onToggle} />
       <Text
@@ -127,6 +133,23 @@ function TaskRow(props: {
       >
         {props.task().title}
       </Text>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 24,
+          height: 24,
+          borderRadius: 5,
+          cursor: "pointer",
+          marginRight: 4,
+          hover: { backgroundColor: "#45475a" },
+        }}
+        onClick={(e) => props.onOpenMenu(e)}
+        testId="task-menu-btn"
+      >
+        <Text style={{ color: "#cdd6f4", fontSize: 14 }}>⋮</Text>
+      </div>
       <div
         style={{
           display: "flex",
@@ -327,6 +350,40 @@ export function TasksApp() {
   // property in place so only that row's style/marker updates natively.
   const [tasks, setTasks] = createStore<Task[]>(makeTasks())
   const [draft, setDraft] = createSignal("")
+  const [menuStatus, setMenuStatus] = createSignal("idle")
+
+  const openMenu = (taskId: number, anchor: ContextMenuAnchor) => {
+    const task = tasks.find((t) => t.id === taskId)
+    if (!task) return
+    const menu = createContextMenu(
+      [
+        { id: "toggle", label: "Toggle complete", checked: task.completed },
+        { type: "separator" },
+        { id: "inspect", label: "Inspect Task", disabled: true },
+        { type: "separator" },
+        { id: "priority", label: "Set Priority" },
+        { id: "delete", label: "Delete task" },
+      ],
+      (id) => {
+        setMenuStatus(id)
+        if (id === "toggle") {
+          setTasks((state) => {
+            const row = state.find((t) => t.id === taskId)
+            if (row) row.completed = !row.completed
+          })
+        } else if (id === "delete") {
+          setTasks((state) => state.filter((t) => t.id !== taskId))
+        }
+      },
+    )
+
+    setMenuStatus("open")
+    void menu.show(anchor).then(
+      (id) => setMenuStatus(id ?? "cancelled"),
+      (err) => setMenuStatus(`error: ${String(err)}`),
+    )
+  }
+
   let secondaryWindow: AppWindow | undefined
   const [closeRequested, setCloseRequested] = createSignal(false)
   const [secondaryClosed, setSecondaryClosed] = createSignal(false)
@@ -400,6 +457,9 @@ export function TasksApp() {
         }}
       >
         <Text style={{ fontSize: 20, fontWeight: "bold", color: "#cdd6f4" }}>Tasks</Text>
+        <Text testId="menu-status" style={{ fontSize: 12, color: "#a6adc8" }}>
+          {menuStatus()}
+        </Text>
         <div
           testId="open-secondary-window"
           style={{
@@ -449,6 +509,7 @@ export function TasksApp() {
                 onDelete={() =>
                   setTasks((state) => state.filter((t) => t.id !== task().id))
                 }
+                onOpenMenu={(anchor) => openMenu(task().id, anchor)}
               />
             )
           }}
