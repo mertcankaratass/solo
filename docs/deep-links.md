@@ -69,7 +69,7 @@ system schemes such as `http`, `https`, `file` and `mailto`.
   second copy.
 - `solo dev` starts a new app Worker on every reload, so listeners from the
   previous build are gone and the new build subscribes afresh.
-- Windows URL delivery: `registerUrlScheme` writes to `HKEY_CURRENT_USER\Software\Classes\<scheme>`. A second launch passes its URL arguments to the running instance over a per-user named pipe (isolated with the user SID in the pipe name, restricted to the current user token via a dedicated DACL, and guarded with `FILE_FLAG_FIRST_PIPE_INSTANCE`) and exits, so there is never a second window. Cold launches deliver URLs once `onOpenUrls` subscribes.
+- Windows URL delivery: `registerUrlScheme` writes to `HKEY_CURRENT_USER\Software\Classes\<scheme>`. A second launch passes its URL arguments to the running instance over a per-user named pipe and exits, so there is never a second window. Cold launches deliver URLs once `onOpenUrls` subscribes.
 
 ## Linux
 
@@ -123,10 +123,17 @@ Windows Registry and a per-user named pipe.
 by link. A URL argument is used as is. An absolute path to a file becomes a
 `file://` URL. Flags and the JS entry run by Bun or Node are ignored.
 
-**Single instance.** The first launch creates and listens on a per-user named
-pipe `\\.\pipe\solo-open-urls-<name>-<hash>`. A second launch forwards its URLs
-and paths over the pipe and exits with status 0, so there is never a second
-window.
+**Single instance.** The first launch creates and listens on the named pipe
+`\\.\pipe\solo-open-urls-<user SID>-<name>-<hash>`. A second launch forwards its
+URLs and paths over the pipe and exits with status 0, so there is never a
+second window.
+
+The pipe is owned by the current user and only that user may open it; remote
+clients are rejected. Before forwarding, a second launch checks the pipe's
+owner. If another user has created a pipe with that name, it refuses to send
+the URLs there, and `init` fails with an error naming the pipe. Each client
+gets its own reader, so one that connects and never writes does not delay
+later launches.
 
 **Registration.**
 
