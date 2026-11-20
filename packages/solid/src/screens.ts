@@ -6,12 +6,12 @@ export type { Screen, ScreenRect } from "@solo/native"
 const changeListeners = new Set<() => void>()
 
 /**
- * The connected screens (macOS, Linux). Each `id` is the display's UUID,
+ * The connected screens (macOS, Linux, Windows). Each `id` is the display's UUID,
  * stable across reconnects and restarts: pass it as the `screen` window
  * option, or store it to reopen a window on the same screen. X11 has no UUID
  * per screen, so ids there are `x11-<root index>`. Rectangles are in points
  * from the screen's own top-left corner, so `bounds` starts at (0, 0) and
- * `visibleBounds` leaves out the menu bar and Dock. Throws off macOS/Linux.
+ * `visibleBounds` leaves out the menu bar and Dock.
  */
 export function getScreens(): Screen[] {
   return native.getScreens()
@@ -19,7 +19,7 @@ export function getScreens(): Screen[] {
 
 /**
  * Called when a screen is connected or disconnected, or its size changes
- * (macOS, Linux). One change can call it more than once; read `getScreens()`
+ * (macOS, Linux, Windows). One change can call it more than once; read `getScreens()`
  * for the current list. Returns a function that stops listening.
  */
 export function onScreensChanged(listener: () => void): () => void {

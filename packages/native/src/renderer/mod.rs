@@ -2655,7 +2655,7 @@ impl SoloRenderer {
         #[cfg(not(any(target_os = "macos", ui_thread)))]
         {
             let _ = (root, options);
-            Err(Error::from_reason("Multiple windows are supported only on macOS and Linux"))
+            Err(Error::from_reason("Multiple windows are supported only on macOS, Linux and Windows"))
         }
     }
 
@@ -2701,7 +2701,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Background window lifecycle is supported only on macOS and Linux",
+                "Background window lifecycle is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2737,7 +2737,7 @@ impl SoloRenderer {
         {
             let _ = target;
             Err(Error::from_reason(
-                "Background window lifecycle is supported only on macOS and Linux",
+                "Background window lifecycle is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2757,7 +2757,7 @@ impl SoloRenderer {
         {
             let _ = (guarded, target);
             Err(Error::from_reason(
-                "Close requests are supported only on macOS and Linux",
+                "Close requests are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2807,7 +2807,7 @@ impl SoloRenderer {
         {
             let _ = target;
             Err(Error::from_reason(
-                "Close requests are supported only on macOS and Linux",
+                "Close requests are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2845,7 +2845,35 @@ impl SoloRenderer {
             Ok(())
         })?;
 
-        #[cfg(ui_thread)]
+        #[cfg(all(target_os = "windows", ui_thread))]
+        return self.query_window(
+            WindowTarget::from_arg(window_id)?,
+            Some("setting the maximized window state"),
+            move |_view, window, _cx| {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                #[link(name = "user32")]
+                extern "system" {
+                    fn ShowWindow(hWnd: isize, nCmdShow: i32) -> i32;
+                }
+                const SW_RESTORE: i32 = 9;
+                const SW_MAXIMIZE: i32 = 3;
+                if let Ok(handle) = window.window_handle() {
+                    if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+                        let hwnd = handle.hwnd.get();
+                        let cmd = if maximized { SW_MAXIMIZE } else { SW_RESTORE };
+                        unsafe {
+                            ShowWindow(hwnd, cmd);
+                        }
+                        return;
+                    }
+                }
+                if window.is_maximized() != maximized {
+                    window.zoom_window();
+                }
+            },
+        );
+
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows"), ui_thread))]
         return self.query_window(
             WindowTarget::from_arg(window_id)?,
             Some("setting the maximized window state"),
@@ -2860,7 +2888,7 @@ impl SoloRenderer {
         {
             let _ = (maximized, window_id);
             Err(Error::from_reason(
-                "Maximized window state is supported only on macOS and Linux",
+                "Maximized window state is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2873,7 +2901,27 @@ impl SoloRenderer {
             Ok(appkit_window(window)?.isZoomed())
         })?;
 
-        #[cfg(ui_thread)]
+        #[cfg(all(target_os = "windows", ui_thread))]
+        return self.query_window(
+            WindowTarget::from_arg(window_id)?,
+            Some("reading the maximized window state"),
+            move |_view, window, _cx| {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                #[link(name = "user32")]
+                extern "system" {
+                    fn IsZoomed(hWnd: isize) -> i32;
+                }
+                if let Ok(handle) = window.window_handle() {
+                    if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+                        let hwnd = handle.hwnd.get();
+                        return unsafe { IsZoomed(hwnd) != 0 };
+                    }
+                }
+                window.is_maximized()
+            },
+        );
+
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows"), ui_thread))]
         return self.query_window(
             WindowTarget::from_arg(window_id)?,
             Some("reading the maximized window state"),
@@ -2884,7 +2932,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Maximized window state is supported only on macOS and Linux",
+                "Maximized window state is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2903,7 +2951,7 @@ impl SoloRenderer {
 
         #[cfg(not(any(target_os = "macos", ui_thread)))]
         Err(Error::from_reason(
-            "Explicit application quit is supported only on macOS and Linux",
+            "Explicit application quit is supported only on macOS, Linux and Windows",
         ))
     }
 
@@ -2927,7 +2975,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Reading the window size is supported only on macOS and Linux",
+                "Reading the window size is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2957,7 +3005,7 @@ impl SoloRenderer {
         {
             let _ = (fullscreen, window_id);
             Err(Error::from_reason(
-                "Fullscreen windows are supported only on macOS and Linux",
+                "Fullscreen windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -2981,7 +3029,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Fullscreen windows are supported only on macOS and Linux",
+                "Fullscreen windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3006,7 +3054,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Minimizing windows is supported only on macOS and Linux",
+                "Minimizing windows is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3037,7 +3085,7 @@ impl SoloRenderer {
         {
             let _ = (background, window_id);
             Err(Error::from_reason(
-                "Changing the window background is supported only on macOS and Linux",
+                "Changing the window background is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3065,7 +3113,7 @@ impl SoloRenderer {
         {
             let _ = (width, height, window_id);
             Err(Error::from_reason(
-                "Resizing windows is supported only on macOS and Linux",
+                "Resizing windows is supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3105,7 +3153,7 @@ impl SoloRenderer {
         {
             let _ = (identifier, target);
             Err(Error::from_reason(
-                "Window tabs are supported only on macOS and Linux",
+                "Window tabs are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3131,7 +3179,7 @@ impl SoloRenderer {
         {
             let _ = target;
             Err(Error::from_reason(
-                "Window tabs are supported only on macOS and Linux",
+                "Window tabs are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3150,7 +3198,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "The tab overview is macOS-only; on Linux the tabs are the window's tab strip",
+                "The tab overview is macOS-only; on Linux and Windows the tabs are the window's tab strip",
             ))
         }
     }
@@ -3199,7 +3247,7 @@ impl SoloRenderer {
         {
             let _ = (edited, window_id);
             Err(Error::from_reason(
-                "Document windows are supported only on macOS and Linux",
+                "Document windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3230,7 +3278,7 @@ impl SoloRenderer {
         {
             let _ = (path, window_id);
             Err(Error::from_reason(
-                "Document windows are supported only on macOS and Linux",
+                "Document windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3255,7 +3303,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Document windows are supported only on macOS and Linux",
+                "Document windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -3280,7 +3328,7 @@ impl SoloRenderer {
         {
             let _ = window_id;
             Err(Error::from_reason(
-                "Document windows are supported only on macOS and Linux",
+                "Document windows are supported only on macOS, Linux and Windows",
             ))
         }
     }
@@ -4602,7 +4650,7 @@ pub(crate) fn validate_window_options(options: &WindowOptions) -> Result<()> {
     }
     if cfg!(not(any(target_os = "macos", ui_thread))) && options.screen.is_some() {
         return Err(Error::from_reason(
-            "The screen window option is supported only on macOS and Linux",
+            "The screen window option is supported only on macOS, Linux and Windows",
         ));
     }
     Ok(())

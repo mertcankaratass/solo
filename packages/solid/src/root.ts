@@ -57,7 +57,7 @@ export interface Root {
   resizeWindow: (size: { width: number; height: number }) => void
   /**
    * Let the window merge into tabs with windows that share `identifier`;
-   * undefined clears it. macOS uses AppKit's window tabs, Linux a tab strip
+   * undefined clears it. macOS uses AppKit's window tabs, Linux and Windows a tab strip
    * Solo draws in the window.
    */
   setTabbingIdentifier: (identifier: string | undefined) => void
@@ -116,7 +116,7 @@ export interface AppWindow {
   resize: (size: { width: number; height: number }) => void
   /**
    * Let the window merge into tabs with windows that share `identifier`;
-   * undefined clears it. macOS uses AppKit's window tabs, Linux a tab strip
+   * undefined clears it. macOS uses AppKit's window tabs, Linux and Windows a tab strip
    * Solo draws in the window.
    */
   setTabbingIdentifier: (identifier: string | undefined) => void
