@@ -614,7 +614,9 @@ mod windows {
     const KEY_WRITE: u32 = 0x20006;
     const REG_SZ: u32 = 1;
     const ERROR_SUCCESS: i32 = 0;
+    const ERROR_ACCESS_DENIED: u32 = 5;
     const ERROR_PIPE_BUSY: u32 = 231;
+    const ERROR_NO_DATA: u32 = 232;
     const ERROR_PIPE_CONNECTED: u32 = 535;
 
     const INVALID_HANDLE_VALUE: HANDLE = -1;
@@ -623,13 +625,50 @@ mod windows {
     const OPEN_EXISTING: u32 = 3;
 
     const PIPE_ACCESS_DUPLEX: u32 = 0x00000003;
+    const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x00080000;
     const PIPE_TYPE_BYTE: u32 = 0x00000000;
     const PIPE_READMODE_BYTE: u32 = 0x00000000;
     const PIPE_WAIT: u32 = 0x00000000;
     const PIPE_UNLIMITED_INSTANCES: u32 = 255;
 
+    const TOKEN_QUERY: u32 = 0x0008;
+    const TOKEN_USER_CLASS: u32 = 1;
+    const SDDL_REVISION_1: u32 = 1;
+
+    #[repr(C)]
+    struct SECURITY_ATTRIBUTES {
+        nLength: u32,
+        lpSecurityDescriptor: *mut std::ffi::c_void,
+        bInheritHandle: BOOL,
+    }
+
     #[link(name = "advapi32")]
     extern "system" {
+        fn OpenProcessToken(
+            ProcessHandle: HANDLE,
+            DesiredAccess: u32,
+            TokenHandle: *mut HANDLE,
+        ) -> BOOL;
+
+        fn GetTokenInformation(
+            TokenHandle: HANDLE,
+            TokenInformationClass: u32,
+            TokenInformation: *mut std::ffi::c_void,
+            TokenInformationLength: u32,
+            ReturnLength: *mut u32,
+        ) -> BOOL;
+
+        fn ConvertSidToStringSidW(
+            Sid: *mut std::ffi::c_void,
+            StringSid: *mut *mut u16,
+        ) -> BOOL;
+
+        fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            StringSecurityDescriptor: *const u16,
+            StringSDRevision: u32,
+            SecurityDescriptor: *mut *mut std::ffi::c_void,
+            SecurityDescriptorSize: *mut u32,
+        ) -> BOOL;
         fn RegCreateKeyExW(
             hKey: HKEY,
             lpSubKey: *const u16,
@@ -699,6 +738,8 @@ mod windows {
         fn CloseHandle(hObject: HANDLE) -> BOOL;
         fn GetLastError() -> u32;
         fn WaitNamedPipeW(lpNamedPipeName: *const u16, nTimeOut: u32) -> BOOL;
+        fn GetCurrentProcess() -> HANDLE;
+        fn LocalFree(hMem: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     }
 
     /// URLs waiting for a renderer that can receive them, or for the JS
@@ -811,16 +852,127 @@ mod windows {
         format!("{name}-{:x}", hasher.finish())
     }
 
+    fn current_user_sid() -> Option<String> {
+        let mut token: HANDLE = 0;
+        let ok = unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) };
+        if ok == 0 || token == 0 {
+            return None;
+        }
+
+        let mut needed = 0u32;
+        unsafe {
+            GetTokenInformation(
+                token,
+                TOKEN_USER_CLASS,
+                std::ptr::null_mut(),
+                0,
+                &mut needed,
+            );
+        }
+        if needed == 0 {
+            unsafe { CloseHandle(token) };
+            return None;
+        }
+
+        let mut buffer = vec![0u8; needed as usize];
+        let ok = unsafe {
+            GetTokenInformation(
+                token,
+                TOKEN_USER_CLASS,
+                buffer.as_mut_ptr() as *mut std::ffi::c_void,
+                needed,
+                &mut needed,
+            )
+        };
+        unsafe { CloseHandle(token) };
+
+        if ok == 0 {
+            return None;
+        }
+
+        let p_sid = unsafe { *(buffer.as_ptr() as *const *mut std::ffi::c_void) };
+        if p_sid.is_null() {
+            return None;
+        }
+
+        let mut string_sid: *mut u16 = std::ptr::null_mut();
+        let ok = unsafe { ConvertSidToStringSidW(p_sid, &mut string_sid) };
+        if ok == 0 || string_sid.is_null() {
+            return None;
+        }
+
+        let mut len = 0;
+        unsafe {
+            while *string_sid.add(len) != 0 {
+                len += 1;
+            }
+        }
+        let slice = unsafe { std::slice::from_raw_parts(string_sid, len) };
+        let sid_str = String::from_utf16_lossy(slice);
+        unsafe { LocalFree(string_sid as *mut std::ffi::c_void) };
+
+        Some(sid_str)
+    }
+
+    struct PipeSecurityDescriptor {
+        sa: SECURITY_ATTRIBUTES,
+        p_sd: *mut std::ffi::c_void,
+    }
+
+    impl PipeSecurityDescriptor {
+        fn for_current_user() -> Option<Self> {
+            let sid = current_user_sid()?;
+            let sddl = format!("D:(A;;GA;;;{sid})");
+            let wide_sddl: Vec<u16> = sddl.encode_utf16().chain(std::iter::once(0)).collect();
+
+            let mut p_sd = std::ptr::null_mut();
+            let mut sd_size = 0u32;
+            let ok = unsafe {
+                ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                    wide_sddl.as_ptr(),
+                    SDDL_REVISION_1,
+                    &mut p_sd,
+                    &mut sd_size,
+                )
+            };
+            if ok == 0 || p_sd.is_null() {
+                return None;
+            }
+
+            Some(PipeSecurityDescriptor {
+                sa: SECURITY_ATTRIBUTES {
+                    nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+                    lpSecurityDescriptor: p_sd,
+                    bInheritHandle: 0,
+                },
+                p_sd,
+            })
+        }
+    }
+
+    impl Drop for PipeSecurityDescriptor {
+        fn drop(&mut self) {
+            if !self.p_sd.is_null() {
+                unsafe {
+                    LocalFree(self.p_sd);
+                }
+            }
+        }
+    }
+
     fn pipe_name() -> String {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        if let Ok(user) = std::env::var("USERNAME") {
-            user.hash(&mut hasher);
-        }
-        if let Ok(profile) = std::env::var("USERPROFILE") {
-            profile.hash(&mut hasher);
-        }
-        format!(r"\\.\pipe\solo-open-urls-{}-{:x}", app_key(), hasher.finish())
+        let sid = current_user_sid().unwrap_or_else(|| {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            if let Ok(user) = std::env::var("USERNAME") {
+                user.hash(&mut hasher);
+            }
+            if let Ok(profile) = std::env::var("USERPROFILE") {
+                profile.hash(&mut hasher);
+            }
+            format!("{:x}", hasher.finish())
+        });
+        format!(r"\\.\pipe\solo-open-urls-{}-{}", sid, app_key())
     }
 
     pub(crate) fn command_line(executable: &Path, script: Option<&Path>) -> String {
@@ -866,27 +1018,128 @@ mod windows {
         if handle != INVALID_HANDLE_VALUE {
             let request = serde_json::to_vec(&urls)
                 .map_err(|error| Error::from_reason(error.to_string()))?;
-            let mut written = 0u32;
-            let write_ok = unsafe {
-                WriteFile(
-                    handle,
-                    request.as_ptr(),
-                    request.len() as u32,
-                    &mut written,
-                    std::ptr::null_mut(),
-                )
-            };
+            let mut total_written = 0usize;
+            while total_written < request.len() {
+                let mut written = 0u32;
+                let chunk_size = (request.len() - total_written) as u32;
+                let write_ok = unsafe {
+                    WriteFile(
+                        handle,
+                        request[total_written..].as_ptr(),
+                        chunk_size,
+                        &mut written,
+                        std::ptr::null_mut(),
+                    )
+                };
+                if write_ok == 0 || written == 0 {
+                    unsafe { CloseHandle(handle) };
+                    return Err(Error::from_reason(
+                        "Cannot reach the running app: WriteFile to named pipe failed",
+                    ));
+                }
+                total_written += written as usize;
+            }
             unsafe { CloseHandle(handle) };
 
-            if write_ok == 0 {
-                return Err(Error::from_reason(
-                    "Cannot reach the running app: WriteFile to named pipe failed",
-                ));
-            }
             return Ok(true);
         }
 
         Ok(false)
+    }
+
+    fn forward_to_running_instance_with_retry(pipe: &str, urls: &[String]) -> Result<bool> {
+        for attempt in 0..10 {
+            if attempt > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            if forward_to_running_instance(pipe, urls)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    enum PipeListenerResult {
+        Started,
+        AlreadyExists,
+        Failed(String),
+    }
+
+    fn start_named_pipe_listener(pipe: &str) -> PipeListenerResult {
+        let wide_pipe: Vec<u16> = pipe.encode_utf16().chain(std::iter::once(0)).collect();
+        let mut sec_desc = PipeSecurityDescriptor::for_current_user();
+        let sa_ptr = match sec_desc.as_mut() {
+            Some(sd) => &mut sd.sa as *mut _ as *mut std::ffi::c_void,
+            None => std::ptr::null_mut(),
+        };
+
+        let handle = unsafe {
+            CreateNamedPipeW(
+                wide_pipe.as_ptr(),
+                PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+                PIPE_UNLIMITED_INSTANCES,
+                4096,
+                4096,
+                0,
+                sa_ptr,
+            )
+        };
+
+        if handle == INVALID_HANDLE_VALUE {
+            let err = unsafe { GetLastError() };
+            if err == ERROR_ACCESS_DENIED || err == ERROR_PIPE_BUSY {
+                return PipeListenerResult::AlreadyExists;
+            }
+            return PipeListenerResult::Failed(format!(
+                "Cannot create named pipe listener: Windows error {err}"
+            ));
+        }
+
+        let spawned = std::thread::Builder::new()
+            .name("solo-open-urls".into())
+            .spawn(move || {
+                loop {
+                    let connected = unsafe { ConnectNamedPipe(handle, std::ptr::null_mut()) };
+                    let last_err = unsafe { GetLastError() };
+                    if connected != 0 || last_err == ERROR_PIPE_CONNECTED {
+                        let mut buffer = Vec::new();
+                        let mut chunk = [0u8; 4096];
+                        loop {
+                            let mut read = 0u32;
+                            let success = unsafe {
+                                ReadFile(
+                                    handle,
+                                    chunk.as_mut_ptr(),
+                                    chunk.len() as u32,
+                                    &mut read,
+                                    std::ptr::null_mut(),
+                                )
+                            };
+                            if success != 0 && read > 0 {
+                                buffer.extend_from_slice(&chunk[..read as usize]);
+                            } else {
+                                break;
+                            }
+                        }
+                        if !buffer.is_empty() {
+                            if let Ok(urls) = serde_json::from_slice::<Vec<String>>(&buffer) {
+                                receive(urls);
+                            }
+                        }
+                    } else if last_err != ERROR_NO_DATA {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                    unsafe {
+                        DisconnectNamedPipe(handle);
+                    }
+                }
+            });
+
+        match spawned {
+            Ok(_) => PipeListenerResult::Started,
+            Err(e) => PipeListenerResult::Failed(format!("Cannot spawn open-urls thread: {e}")),
+        }
     }
 
     pub(super) fn claim_single_instance() -> Result<bool> {
@@ -897,63 +1150,22 @@ mod windows {
             return Ok(false);
         }
 
-        receive(urls);
-        start_named_pipe_listener(&pipe)?;
-        Ok(true)
-    }
-
-    fn start_named_pipe_listener(pipe: &str) -> Result<()> {
-        let wide_pipe: Vec<u16> = pipe.encode_utf16().chain(std::iter::once(0)).collect();
-        let handle = unsafe {
-            CreateNamedPipeW(
-                wide_pipe.as_ptr(),
-                PIPE_ACCESS_DUPLEX,
-                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
-                PIPE_UNLIMITED_INSTANCES,
-                4096,
-                4096,
-                0,
-                std::ptr::null_mut(),
-            )
-        };
-        if handle == INVALID_HANDLE_VALUE {
-            return Err(Error::from_reason(format!(
-                "Cannot create named pipe listener: Windows error {}",
-                unsafe { GetLastError() }
-            )));
-        }
-
-        std::thread::Builder::new()
-            .name("solo-open-urls".into())
-            .spawn(move || {
-                loop {
-                    let connected = unsafe { ConnectNamedPipe(handle, std::ptr::null_mut()) };
-                    if connected != 0 || unsafe { GetLastError() } == ERROR_PIPE_CONNECTED {
-                        let mut buffer = vec![0u8; 65536];
-                        let mut read = 0u32;
-                        let success = unsafe {
-                            ReadFile(
-                                handle,
-                                buffer.as_mut_ptr(),
-                                buffer.len() as u32,
-                                &mut read,
-                                std::ptr::null_mut(),
-                            )
-                        };
-                        if success != 0 && read > 0 {
-                            if let Ok(urls) = serde_json::from_slice::<Vec<String>>(&buffer[..read as usize]) {
-                                receive(urls);
-                            }
-                        }
-                        unsafe {
-                            DisconnectNamedPipe(handle);
-                        }
-                    }
+        match start_named_pipe_listener(&pipe) {
+            PipeListenerResult::Started => {
+                receive(urls);
+                Ok(true)
+            }
+            PipeListenerResult::AlreadyExists => {
+                if forward_to_running_instance_with_retry(&pipe, &urls)? {
+                    Ok(false)
+                } else {
+                    Err(Error::from_reason(
+                        "Another instance owns the named pipe, but forwarding failed",
+                    ))
                 }
-            })
-            .map_err(|e| Error::from_reason(format!("Cannot spawn open-urls thread: {e}")))?;
-
-        Ok(())
+            }
+            PipeListenerResult::Failed(reason) => Err(Error::from_reason(reason)),
+        }
     }
 
     fn set_reg_string(hkey: HKEY, subkey: &str, value_name: Option<&str>, value: &str) -> Result<()> {
@@ -1078,6 +1290,52 @@ mod windows {
             let scheme = "solo-windows-deep-link-test";
             register(scheme).unwrap();
             delete_reg_scheme(scheme).unwrap();
+        }
+
+        #[test]
+        fn current_user_sid_is_valid() {
+            let sid = current_user_sid();
+            assert!(sid.is_some());
+            let sid_str = sid.unwrap();
+            assert!(sid_str.starts_with("S-1-"));
+        }
+
+        #[test]
+        fn pipe_exclusivity_and_first_instance_flag() {
+            let unique_name = format!(r"\\.\pipe\solo-test-pipe-exclusivity-{}", std::process::id());
+            let wide: Vec<u16> = unique_name.encode_utf16().chain(std::iter::once(0)).collect();
+
+            let h1 = unsafe {
+                CreateNamedPipeW(
+                    wide.as_ptr(),
+                    PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                    PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+                    PIPE_UNLIMITED_INSTANCES,
+                    4096,
+                    4096,
+                    0,
+                    std::ptr::null_mut(),
+                )
+            };
+            assert_ne!(h1, INVALID_HANDLE_VALUE);
+
+            // Second creation on same pipe with FILE_FLAG_FIRST_PIPE_INSTANCE must fail with ERROR_ACCESS_DENIED
+            let h2 = unsafe {
+                CreateNamedPipeW(
+                    wide.as_ptr(),
+                    PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                    PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+                    PIPE_UNLIMITED_INSTANCES,
+                    4096,
+                    4096,
+                    0,
+                    std::ptr::null_mut(),
+                )
+            };
+            assert_eq!(h2, INVALID_HANDLE_VALUE);
+            assert_eq!(unsafe { GetLastError() }, ERROR_ACCESS_DENIED);
+
+            unsafe { CloseHandle(h1) };
         }
     }
 }

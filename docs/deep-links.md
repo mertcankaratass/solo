@@ -69,7 +69,7 @@ system schemes such as `http`, `https`, `file` and `mailto`.
   second copy.
 - `solo dev` starts a new app Worker on every reload, so listeners from the
   previous build are gone and the new build subscribes afresh.
-- Windows URL delivery: `registerUrlScheme` writes to `HKEY_CURRENT_USER\Software\Classes\<scheme>`. A second launch passes its URL arguments to the running instance over a per-user named pipe and exits, so there is never a second window. Cold launches deliver URLs once `onOpenUrls` subscribes.
+- Windows URL delivery: `registerUrlScheme` writes to `HKEY_CURRENT_USER\Software\Classes\<scheme>`. A second launch passes its URL arguments to the running instance over a per-user named pipe (isolated with the user SID in the pipe name, restricted to the current user token via a dedicated DACL, and guarded with `FILE_FLAG_FIRST_PIPE_INSTANCE`) and exits, so there is never a second window. Cold launches deliver URLs once `onOpenUrls` subscribes.
 
 ## Linux
 

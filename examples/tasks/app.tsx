@@ -15,7 +15,7 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js"
-import { View, Text, Button } from "@solo/solid"
+import { View, Text, Button, onOpenUrls } from "@solo/solid"
 import type { StyleDesc } from "@solo/solid"
 
 interface Task {
@@ -152,6 +152,14 @@ export function TasksApp() {
   // property in place so only that row's style/marker updates natively.
   const [tasks, setTasks] = createStore<Task[]>(makeTasks())
   const [draft, setDraft] = createSignal("")
+
+  onOpenUrls((urls) => {
+    setTasks((state) => {
+      for (const url of urls) {
+        state.push({ id: nextTaskId++, title: `Link: ${url}`, completed: false })
+      }
+    })
+  })
 
   const addTask = () => {
     const title = draft().trim()

@@ -244,6 +244,22 @@ describe("tasks app automation", () => {
     }
   }, 30_000)
 
+  it.skipIf(process.platform === "darwin")("delivers deep-link URLs from a second launch into the running instance", async () => {
+    const app = await launchTasksApp()
+    try {
+      const { execFile } = await import("node:child_process")
+      const { promisify } = await import("node:util")
+      const exec = promisify(execFile)
+
+      await exec("bun", [ENTRY, "tasks://open-deep-link-target"])
+
+      const found = await waitForText(app, "Link: tasks://open-deep-link-target")
+      expect(found.some((entry) => entry.includes("Link: tasks://open-deep-link-target"))).toBe(true)
+    } finally {
+      await app.close()
+    }
+  }, 30_000)
+
   /** Poll `getAllText` until some entry contains `needle`. */
   async function waitForText(app: App, needle: string): Promise<string[]> {
     const deadline = Date.now() + 10_000
