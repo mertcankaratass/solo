@@ -16,6 +16,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { inflateSync } from "node:zlib"
 import { describe, expect, it } from "vitest"
 import { launch } from "@solo/solid/automation"
 import type { App } from "@solo/solid/automation"
@@ -170,10 +171,20 @@ describe("tasks app automation", () => {
         const path = await app.screenshot({
           path: join(dir, `window-${process.pid}.png`),
         })
+        const bytes = readFileSync(path)
         // A PNG starts with this 8-byte signature.
-        expect(readFileSync(path).subarray(0, 8)).toEqual(
+        expect(bytes.subarray(0, 8)).toEqual(
           Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
         )
+        const png = parsePng(bytes)
+        expect(png.width).toBeGreaterThan(0)
+        expect(png.height).toBeGreaterThan(0)
+        // Ensure the screenshot is not a uniform or uninitialized all-black frame
+        const uniqueBytes = new Set(png.pixels)
+        expect(uniqueBytes.size).toBeGreaterThan(1)
+        // Verify pixels match known app colors (#1e1e2e -> 0x1e, 0x2e)
+        expect(uniqueBytes.has(0x1e)).toBe(true)
+        expect(uniqueBytes.has(0x2e)).toBe(true)
       } finally {
         if (!retained) rmSync(dir, { recursive: true, force: true })
       }
@@ -181,6 +192,26 @@ describe("tasks app automation", () => {
       await app.close()
     }
   }, 30_000)
+
+  function parsePng(buffer: Buffer): { width: number; height: number; pixels: Buffer } {
+    let offset = 8
+    const idatParts: Buffer[] = []
+    let width = 0
+    let height = 0
+    while (offset < buffer.length) {
+      const length = buffer.readUInt32BE(offset)
+      const type = buffer.subarray(offset + 4, offset + 8).toString("ascii")
+      if (type === "IHDR") {
+        width = buffer.readUInt32BE(offset + 8)
+        height = buffer.readUInt32BE(offset + 12)
+      } else if (type === "IDAT") {
+        idatParts.push(buffer.subarray(offset + 8, offset + 8 + length))
+      }
+      offset += 12 + length
+    }
+    const decompressed = inflateSync(Buffer.concat(idatParts))
+    return { width, height, pixels: decompressed }
+  }
 
   it("types into the composer with fill() and press()", async () => {
     const app = await launchTasksApp()

@@ -4205,10 +4205,20 @@ fn capture_windows_window(window: &gpui::Window, path: &str) -> std::result::Res
         }
         let old_hbm = SelectObject(hdc_mem, hbm);
 
-        if PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY | PW_RENDERFULLCONTENT) == 0 {
-            if PrintWindow(hwnd, hdc_mem, PW_RENDERFULLCONTENT) == 0 {
-                BitBlt(hdc_mem, 0, 0, width, height, hdc_window, 0, 0, SRCCOPY);
-            }
+        let mut captured = PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY | PW_RENDERFULLCONTENT) != 0;
+        if !captured {
+            captured = PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY) != 0;
+        }
+        if !captured {
+            captured = BitBlt(hdc_mem, 0, 0, width, height, hdc_window, 0, 0, SRCCOPY) != 0;
+        }
+
+        if !captured {
+            SelectObject(hdc_mem, old_hbm);
+            DeleteObject(hbm);
+            DeleteDC(hdc_mem);
+            ReleaseDC(hwnd, hdc_window);
+            return Err("Windows screenshot failed: PrintWindow and BitBlt failed".into());
         }
 
         SelectObject(hdc_mem, old_hbm);
