@@ -49,26 +49,14 @@ fn rect(bounds: gpui::Bounds<gpui::Pixels>) -> ScreenRect {
     }
 }
 
-/// A stable id for a screen: its UUID where the platform reports one, and the
-/// X11/Windows root index otherwise.
+/// A stable id for a screen: its UUID where the platform reports one (macOS and
+/// Windows report non-nil UUIDs), and the X11 root index otherwise.
 fn screen_id(display: &dyn gpui::PlatformDisplay, index: usize) -> String {
     display
         .uuid()
         .ok()
         .filter(|uuid| !uuid.is_nil())
-        .map_or_else(
-            || {
-                #[cfg(target_os = "windows")]
-                {
-                    format!("win-{index}")
-                }
-                #[cfg(not(target_os = "windows"))]
-                {
-                    format!("x11-{index}")
-                }
-            },
-            |uuid| uuid.to_string(),
-        )
+        .map_or_else(|| format!("x11-{index}"), |uuid| uuid.to_string())
 }
 
 /// The connected screens.

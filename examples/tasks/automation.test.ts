@@ -290,11 +290,16 @@ describe("tasks app automation", () => {
 
       const stateLogElem = app.getByTestId("secondary-state-log")
       let stateLogText = await stateLogElem.textContent()
-      for (let i = 0; i < 20 && !stateLogText.includes("resized:true"); i++) {
+      for (let i = 0; i < 20 && !stateLogText.includes("resized:420x320"); i++) {
         await new Promise((r) => setTimeout(r, 100))
         stateLogText = await stateLogElem.textContent()
       }
-      expect(stateLogText).toContain("resized:true")
+      expect(stateLogText).toContain("initial:360x300")
+      expect(stateLogText).toContain("resized:420x320")
+      expect(stateLogText).toContain("wasMax:false")
+      expect(stateLogText).toContain("isMax:true")
+      expect(stateLogText).toContain("restored:true")
+      expect(stateLogText).toContain("fs:true")
 
       // 8. Test guarded close request: requestClose leaves window open
       const requestCloseBtn = app.getByTestId("secondary-request-close-btn")

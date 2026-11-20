@@ -151,7 +151,6 @@ function StatsWindow(props: {
   tasks: () => Task[]
   windowRef: () => AppWindow | undefined
   closeRequested: () => boolean
-  onRequestCloseCalled: () => void
   onConfirmedClose: () => void
 }) {
   const [subCount, setSubCount] = createSignal(0)
@@ -228,13 +227,17 @@ function StatsWindow(props: {
           win.setBackground("transparent")
           win.setBackground("opaque")
 
-          const wasMaximized = win.isMaximized()
+          const wasMax = win.isMaximized()
           win.maximize()
-          const isMaxNow = win.isMaximized()
+          const isMax = win.isMaximized()
           win.restore()
+          const restored = !win.isMaximized()
 
+          const beforeFs = win.isFullscreen()
           win.toggleFullscreen()
+          const inFs = win.isFullscreen()
           win.toggleFullscreen()
+          const outFs = win.isFullscreen()
 
           win.setDocumentEdited(true)
           const isWindows =
@@ -263,7 +266,7 @@ function StatsWindow(props: {
           win.focus()
 
           setStateLog(
-            `ok;size:${initialSize.width > 0};resized:${resizedSize.width > 0};tabThrew:${tabOverviewThrew};charThrew:${charPaletteThrew}`
+            `ok;initial:${initialSize.width}x${initialSize.height};resized:${resizedSize.width}x${resizedSize.height};wasMax:${wasMax};isMax:${isMax};restored:${restored};fs:${inFs};tabThrew:${tabOverviewThrew};charThrew:${charPaletteThrew}`
           )
         }}
       >
@@ -345,7 +348,6 @@ export function TasksApp() {
           tasks={() => tasks}
           windowRef={() => secondaryWindow}
           closeRequested={closeRequested}
-          onRequestCloseCalled={() => setCloseRequested(true)}
           onConfirmedClose={() => setSecondaryClosed(true)}
         />
       ),
