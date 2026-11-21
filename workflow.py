@@ -193,7 +193,7 @@ def check(stage):
             # encoding and crashes on output such as vite's "✓".
             env={"PYTHONUTF8": "1"},
             caches=[cargo_cache("windows-test", "windows-test-cargo-")],
-            before_steps=[SETUP_RUST],
+            before_steps=[SETUP_RUST, INSTALL_NEXTEST],
         ),
     )
     def windows_test(ctx):
@@ -202,6 +202,12 @@ def check(stage):
         run(ctx, "bun", "install")
         run(ctx, "bun", "run", "build:release:full", cwd=NATIVE)
         restore_generated_bindings(ctx)
+        # The single-instance named pipe is Windows-only code. The lib tests
+        # need test-support (gpui test contexts, syntax grammars), as on macOS.
+        run(
+            ctx, "cargo", "nextest", "run", "--locked", "--features", "test-support",
+            "--lib", "open_urls::", cwd=NATIVE,
+        )  # fmt: skip
         load_binding(ctx, "win32-x64-msvc")
         run(ctx, "bun", "run", "build", cwd="packages/core")
         run(ctx, "bun", "run", "build", cwd="packages/solid")

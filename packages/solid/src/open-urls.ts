@@ -49,7 +49,8 @@ export function onOpenUrls(listener: OpenUrlsListener): () => void {
  * macOS: needs 12+, an installed bundle with an identifier, and the scheme
  * declared under `CFBundleURLTypes` in `Info.plist`. Linux: writes a
  * freedesktop `.desktop` entry claiming the scheme and runs `xdg-mime
- * default`. Rejects an invalid scheme name or one the system owns, such as
+ * default`. Windows: writes `HKEY_CURRENT_USER\Software\Classes\<scheme>`
+ * keys. Rejects an invalid scheme name or one the system owns, such as
  * `https`.
  */
 export async function registerUrlScheme(scheme: string): Promise<void> {

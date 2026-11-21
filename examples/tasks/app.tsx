@@ -15,7 +15,7 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js"
-import { createContextMenu, View, Text, Button, getScreens, openWindow } from "@solo/solid"
+import { createContextMenu, View, Text, Button, getScreens, onOpenUrls, openWindow } from "@solo/solid"
 import type { AppWindow, ContextMenuAnchor, StyleDesc } from "@solo/solid"
 
 interface Task {
@@ -422,6 +422,14 @@ export function TasksApp() {
       }
     )
   }
+
+  onOpenUrls((urls) => {
+    setTasks((state) => {
+      for (const url of urls) {
+        state.push({ id: nextTaskId++, title: `Link: ${url}`, completed: false })
+      }
+    })
+  })
 
   const addTask = () => {
     const title = draft().trim()

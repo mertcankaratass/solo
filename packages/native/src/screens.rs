@@ -135,7 +135,7 @@ pub fn get_screens() -> Result<Vec<Screen>> {
     {
         // Native Solid tests list the test app's displays, not the live UI
         // thread's.
-        #[cfg(feature = "test-support")]
+        #[cfg(all(feature = "test-support", any(target_os = "macos", target_os = "linux")))]
         if crate::test_renderer::has_app() {
             return crate::test_renderer::with_app(|cx| list(cx))
                 .ok_or_else(|| Error::from_reason("getScreens needs a running Solo app"));
