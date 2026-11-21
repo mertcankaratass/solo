@@ -102,7 +102,7 @@ fn with_app<R: Send + 'static>(
 ) -> Result<R> {
     // Native Solid tests run the same app helpers against
     // `TestSoloRenderer`'s GPUI app on this thread, not the UI thread.
-    #[cfg(feature = "test-support")]
+    #[cfg(all(feature = "test-support", any(target_os = "macos", target_os = "linux")))]
     if crate::test_renderer::has_app() {
         return crate::test_renderer::with_app(f)
             .ok_or_else(|| Error::from_reason(format!("{action} needs a running Solo app")));
