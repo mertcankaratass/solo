@@ -202,10 +202,10 @@ def check(stage):
         run(ctx, "bun", "install")
         run(ctx, "bun", "run", "build:release:full", cwd=NATIVE)
         restore_generated_bindings(ctx)
-        # The single-instance named pipe is Windows-only code; its Rust tests
-        # reuse the release build's dependencies.
+        # The single-instance named pipe is Windows-only code. The lib tests
+        # need test-support (gpui test contexts, syntax grammars), as on macOS.
         run(
-            ctx, "cargo", "nextest", "run", "--locked", "--release", "--features", "automation",
+            ctx, "cargo", "nextest", "run", "--locked", "--features", "test-support",
             "--lib", "open_urls::", cwd=NATIVE,
         )  # fmt: skip
         load_binding(ctx, "win32-x64-msvc")
